@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
@@ -8,18 +8,21 @@ const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
+type RequestStatus = 'Pending' | 'In-Progress' | 'Closed_by_Sant' | 'Completed';
+type QueueFilter = 'All' | 'Pending' | 'In-Progress' | 'Completed';
+
 interface ServiceRequest {
   id: number;
   ticket_id: string;
   subject: string;
   description: string;
-  status: 'Pending' | 'In-Progress' | 'Closed_by_Sant' | 'Completed';
+  status: RequestStatus;
   channel: 'Email' | 'Telegram' | 'WhatsApp';
   created_at: string;
   sants: {
     name: string;
     shared_folder_link: string;
-  };
+  } | null;
   request_amendments?: {
     id: number;
     type: string;
@@ -28,266 +31,642 @@ interface ServiceRequest {
   }[];
 }
 
+const navItems: { label: string; filter: QueueFilter; icon: string }[] = [
+  { label: 'ડેશબોર્ડ', filter: 'All', icon: 'grid' },
+  { label: 'પેન્ડિંગ', filter: 'Pending', icon: 'clock' },
+  { label: 'ચાલુ કાર્યો', filter: 'In-Progress', icon: 'gear' },
+  { label: 'પૂર્ણ થયેલ', filter: 'Completed', icon: 'check' },
+];
+
+function Icon({ name, size = 20 }: { name: string; size?: number }) {
+  const common = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true as const,
+  };
+
+  switch (name) {
+    case 'grid':
+      return <svg {...common}><rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" /><rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" /></svg>;
+    case 'inbox':
+      return <svg {...common}><path d="M4 4h16l1 11h-5l-2 3h-4l-2-3H3L4 4Z" /><path d="M3.5 15h5l2 3h3l2-3h5" /><path d="M9 9h6" /></svg>;
+    case 'clock':
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>;
+    case 'gear':
+      return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="m19.4 15 .1.1 1.1.9-1.1 1.9-1.4-.5a7.8 7.8 0 0 1-1.7 1l-.2 1.5h-2.2l-.3-1.5a7.8 7.8 0 0 1-1.8-.1l-1 1.1-1.9-1.1.5-1.4a7.8 7.8 0 0 1-1-1.7l-1.5-.2v-2.2l1.5-.3a7.8 7.8 0 0 1 .1-1.8l-1.1-1 1.1-1.9 1.4.5a7.8 7.8 0 0 1 1.7-1l.2-1.5h2.2l.3 1.5a7.8 7.8 0 0 1 1.8.1l1-1.1 1.9 1.1-.5 1.4a7.8 7.8 0 0 1 1 1.7l1.5.2v2.2l-1.5.3a7.8 7.8 0 0 1-.1 1.8Z" transform="translate(-1 -1) scale(1.08)" /></svg>;
+    case 'check':
+      return <svg {...common}><circle cx="12" cy="12" r="9" /><path d="m8 12 2.5 2.5L16.5 9" /></svg>;
+    case 'file':
+      return <svg {...common}><path d="M6 3h8l4 4v14H6z" /><path d="M14 3v5h5M9 12h6M9 16h6" /></svg>;
+    case 'arrow':
+      return <svg {...common}><path d="M5 12h14M13 6l6 6-6 6" /></svg>;
+    case 'bell':
+      return <svg {...common}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>;
+    case 'spark':
+      return <svg {...common}><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z" /></svg>;
+    default:
+      return null;
+  }
+}
+
+function getStatusLabel(status: RequestStatus) {
+  switch (status) {
+    case 'Pending':
+      return 'પેન્ડિંગ';
+    case 'In-Progress':
+      return 'ચાલુ છે';
+    case 'Completed':
+      return 'પૂર્ણ';
+    case 'Closed_by_Sant':
+      return 'બંધ';
+  }
+}
+
+function formatDate(date: string) {
+  return new Date(date).toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 export default function YuvakQueuePage() {
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<QueueFilter>('All');
   const [selectedRequest, setSelectedRequest] = useState<ServiceRequest | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const [actionError, setActionError] = useState('');
 
-  // ૧. રિક્વેસ્ટ્સ લોડ કરવી
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     const { data, error } = await supabase
       .from('service_requests')
       .select('*, sants(name, shared_folder_link), request_amendments(*)')
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      setRequests(data as any);
+    if (error) {
+      setErrorMessage(`વિનંતીઓ લોડ થઈ શકી નથી: ${error.message}`);
+    } else {
+      setErrorMessage('');
+      setRequests((data ?? []) as ServiceRequest[]);
     }
     setLoading(false);
-  };
+  }, []);
 
   useEffect(() => {
-    fetchRequests();
+    void fetchRequests();
 
-    // ૨. Supabase Realtime Subscription (કોઈપણ ફેરફાર થાય ત્યારે આપોઆપ અપડેટ)
     const channel = supabase
       .channel('realtime_requests')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'service_requests' },
-        () => {
-          fetchRequests();
-        }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'request_amendments' },
-        () => {
-          fetchRequests();
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, () => {
+        void fetchRequests();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'request_amendments' }, () => {
+        void fetchRequests();
+      })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(channel);
+      void supabase.removeChannel(channel);
     };
-  }, []);
+  }, [fetchRequests]);
 
-  // ૩. રિક્વેસ્ટ સ્વીકારવી (Acknowledge / In-Progress)
-  const handleAcknowledge = async (id: number) => {
+  const counts = useMemo(() => ({
+    total: requests.length,
+    pending: requests.filter((request) => request.status === 'Pending').length,
+    inProgress: requests.filter((request) => request.status === 'In-Progress').length,
+    completed: requests.filter((request) => request.status === 'Completed').length,
+  }), [requests]);
+
+  const visibleRequests = useMemo(
+    () => filter === 'All' ? requests : requests.filter((request) => request.status === filter),
+    [filter, requests]
+  );
+
+  const startTask = async (id: number) => {
+    setActionError('');
     const { error } = await supabase
       .from('service_requests')
       .update({ status: 'In-Progress', updated_at: new Date().toISOString() })
       .eq('id', id);
 
-    if (!error) {
-      fetchRequests();
+    if (error) {
+      setActionError(`કાર્ય શરૂ થઈ શક્યું નથી: ${error.message}`);
+      return;
     }
+    await fetchRequests();
   };
 
-  // ૪. કાર્ય પૂર્ણ કરવું અને દસ્તાવેજ અપલોડ
-  const handleCompleteTask = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCompleteTask = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     if (!selectedRequest || !uploadFile) return;
 
     setSubmitting(true);
+    setActionError('');
     const formData = new FormData();
     formData.append('file', uploadFile);
 
     try {
-      const res = await fetch(`/api/requests/${selectedRequest.id}/complete`, {
+      const response = await fetch(`/api/requests/${selectedRequest.id}/complete`, {
         method: 'POST',
         body: formData,
       });
+      const result = await response.json();
 
-      const result = await res.json();
-      if (res.ok) {
-        alert('કાર્ય સફળતાપૂર્વક સંપન્ન થયું!');
-        setSelectedRequest(null);
-        setUploadFile(null);
-        fetchRequests();
-      } else {
-        alert(`ભૂલ: ${result.error}`);
+      if (!response.ok) {
+        setActionError(result.error || 'ફાઇલ અપલોડ થઈ શકી નથી.');
+        return;
       }
-    } catch (err: any) {
-      alert(`નેટવર્ક ભૂલ: ${err.message}`);
+
+      setSelectedRequest(null);
+      setUploadFile(null);
+      await fetchRequests();
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'નેટવર્ક ભૂલ થઈ.');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Pending':
-        return <span className="bg-amber-100 text-amber-800 text-xs px-2.5 py-1 rounded-full font-medium">પેન્ડિંગ (Pending)</span>;
-      case 'In-Progress':
-        return <span className="bg-blue-100 text-blue-800 text-xs px-2.5 py-1 rounded-full font-medium animate-pulse">ચાલુ છે (In-Progress)</span>;
-      case 'Closed_by_Sant':
-        return <span className="bg-rose-100 text-rose-800 text-xs px-2.5 py-1 rounded-full font-medium">સંત દ્વારા રદ (Closed by Sant)</span>;
-      case 'Completed':
-        return <span className="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-medium">સંપન્ન (Completed)</span>;
-      default:
-        return null;
-    }
+  const chartTotal = counts.pending + counts.inProgress + counts.completed;
+  const pendingDegrees = chartTotal ? (counts.pending / chartTotal) * 360 : 0;
+  const progressDegrees = chartTotal ? (counts.inProgress / chartTotal) * 360 : 0;
+  const completedDegrees = chartTotal ? (counts.completed / chartTotal) * 360 : 0;
+  const progressStart = pendingDegrees;
+  const completedStart = pendingDegrees + progressDegrees;
+  const chartStyle = {
+    background: chartTotal
+      ? `conic-gradient(#e9a929 0deg ${pendingDegrees}deg, #2e82cc ${pendingDegrees}deg ${completedStart}deg, #159b78 ${completedStart}deg ${pendingDegrees + progressDegrees + completedDegrees}deg, #e9edf3 ${pendingDegrees + progressDegrees + completedDegrees}deg 360deg)`
+      : '#e9edf3',
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 pb-4 border-b border-slate-200">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">કોમ્પ્યુટર વર્કશોપ સેવા ક્યુ (Live Queue)</h1>
-            <p className="text-sm text-slate-500 mt-1">પૂજ્ય સંતો તરફથી આવેલ સેવા વિનંતીઓનું રીઅલ-ટાઇમ મોનિટરિંગ</p>
+    <div className="min-h-screen bg-[#f4f7fb] text-[#14233d] lg:flex">
+      <aside className="flex w-full shrink-0 flex-col bg-[#0b2445] text-white lg:min-h-screen lg:w-[250px]">
+        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
+          <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#f4cf7a] to-[#d89725] text-xl font-bold text-[#10294d] shadow-lg">
+            ૐ
           </div>
-          <div className="mt-4 md:mt-0 flex items-center space-x-2">
-            <span className="flex h-3 w-3 relative">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <span className="text-sm text-slate-600 font-medium">રીઅલ-ટાઇમ સિન્ક સક્રિય</span>
+          <div>
+            <p className="text-sm font-bold tracking-wide">BAPS Atladara</p>
+            <p className="mt-0.5 text-xs text-blue-100/70">Computer Room</p>
           </div>
         </div>
 
-        {/* Requests Grid */}
-        {loading ? (
-          <div className="text-center py-12 text-slate-500">વિનંતીઓ લોડ થઈ રહી છે...</div>
-        ) : requests.length === 0 ? (
-          <div className="text-center py-12 bg-white rounded-xl border border-slate-200 text-slate-500">
-            હાલમાં કોઈ પેન્ડિંગ રિક્વેસ્ટ ઉપલબ્ધ નથી.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {requests.map((req) => (
-              <div
-                key={req.id}
-                className="bg-white rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow p-5 flex flex-col justify-between"
-              >
-                <div>
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <span className="text-xs font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded">
-                        {req.ticket_id}
-                      </span>
-                      <span className="ml-2 text-xs text-slate-400">
-                        {new Date(req.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </span>
-                    </div>
-                    {getStatusBadge(req.status)}
-                  </div>
-
-                  <h3 className="font-semibold text-slate-900 text-base mb-1">
-                    {req.sants?.name || 'પૂજ્ય સંત'}
-                  </h3>
-
-                  <div className="text-xs text-slate-500 mb-3 flex items-center gap-1">
-                    <span>ચેનલ:</span>
-                    <span className="font-medium text-slate-700">{req.channel}</span>
-                  </div>
-
-                  <p className="text-sm text-slate-700 line-clamp-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100 mb-3">
-                    {req.description}
-                  </p>
-
-                  {/* સુધારા / અમેન્ડમેન્ટ એલર્ટ બેજ */}
-                  {req.request_amendments && req.request_amendments.length > 0 && (
-                    <div className="mb-3 p-2 bg-amber-50 border border-amber-200 rounded-md text-xs text-amber-900">
-                      <span className="font-bold">⚠️ સુધારો / નવી સૂચના ({req.request_amendments.length}):</span>
-                      <p className="mt-0.5 text-amber-800 line-clamp-2">
-                        {req.request_amendments[req.request_amendments.length - 1].notes}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* એક્શન બટન્સ */}
-                <div className="pt-4 border-t border-slate-100 flex items-center justify-between gap-2">
-                  {req.status === 'Pending' && (
-                    <button
-                      onClick={() => handleAcknowledge(req.id)}
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition"
-                    >
-                      સ્વીકારો (Start Task)
-                    </button>
-                  )}
-
-                  {req.status === 'In-Progress' && (
-                    <button
-                      onClick={() => setSelectedRequest(req)}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition"
-                    >
-                      દસ્તાવેજ અપલોડ & પૂર્ણ કરો
-                    </button>
-                  )}
-
-                  {req.status === 'Closed_by_Sant' && (
-                    <span className="text-xs text-slate-400 italic text-center w-full">
-                      સંત દ્વારા વિનંતી પૂર્ણ/રદ કરવામાં આવી છે
+        <div className="px-4 pt-6">
+          <p className="mb-3 px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-blue-100/45">મેનુ</p>
+          <nav aria-label="મુખ્ય મેનુ" className="flex gap-2 overflow-x-auto pb-3 lg:flex-col lg:overflow-visible">
+            {navItems.map((item, index) => {
+              const isActive = index === 0 ? filter === 'All' : filter === item.filter && (item.filter !== 'All' || filter === 'All');
+              return (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => {
+                    setFilter(item.filter);
+                    document.getElementById('requests')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                  }}
+                  className={`flex shrink-0 items-center gap-3 rounded-xl px-3 py-3 text-left text-sm transition ${
+                    isActive
+                      ? 'bg-[#f0bb4f] font-semibold text-[#10294d] shadow-md shadow-black/10'
+                      : 'text-blue-50/75 hover:bg-white/10 hover:text-white'
+                  }`}
+                >
+                  <Icon name={item.icon} size={18} />
+                  <span>{item.label}</span>
+                  {item.filter !== 'All' && (
+                    <span className={`ml-auto rounded-full px-2 py-0.5 text-[10px] ${isActive ? 'bg-white/50' : 'bg-white/10'}`}>
+                      {item.filter === 'Pending' ? counts.pending : item.filter === 'In-Progress' ? counts.inProgress : counts.completed}
                     </span>
                   )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
 
-                  {req.status === 'Completed' && (
-                    <span className="text-xs text-emerald-600 font-medium text-center w-full">
-                      ✓ દસ્તાવેજ સંતના ફોલ્ડરમાં મોકલાઈ ગયો
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+        <div className="mt-auto hidden px-4 pb-5 pt-8 lg:block">
+          <div className="overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#153967] to-[#102b50] p-4">
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-xl bg-white/10 text-[#f0bb4f]">
+              <Icon name="spark" size={21} />
+            </div>
+            <p className="text-sm font-semibold">સેવા એ જ સાધના</p>
+            <p className="mt-1 text-xs leading-5 text-blue-100/60">ટેકનોલોજી દ્વારા સત્સંગની સેવામાં સહભાગી બનો.</p>
+            <div className="mt-4 h-px bg-gradient-to-r from-[#f0bb4f]/70 to-transparent" />
+            <p className="mt-3 text-[10px] tracking-wide text-blue-100/50">BAPS MANDIR · ATLADARA</p>
           </div>
-        )}
+        </div>
+      </aside>
 
-        {/* Upload Modal */}
-        {selectedRequest && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl">
-              <h2 className="text-lg font-bold text-slate-900 mb-2">
-                કાર્ય પૂર્ણ કરો: {selectedRequest.ticket_id}
-              </h2>
-              <p className="text-sm text-slate-600 mb-4">
-                {selectedRequest.sants?.name} ના નિર્ધારિત Google Drive Shared Folder માં તૈયાર થયેલ ફાઇલ અપલોડ થશે.
-              </p>
-
-              <form onSubmit={handleCompleteTask}>
-                <div className="mb-4">
-                  <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-                    તૈયાર થયેલ ફાઇલ પસંદ કરો
-                  </label>
-                  <input
-                    type="file"
-                    required
-                    onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                    className="w-full text-sm text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100 border border-slate-200 rounded-lg p-2"
-                  />
-                </div>
-
-                <div className="flex justify-end gap-2 mt-6">
-                  <button
-                    type="button"
-                    disabled={submitting}
-                    onClick={() => {
-                      setSelectedRequest(null);
-                      setUploadFile(null);
-                    }}
-                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
-                  >
-                    રદ કરો
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={submitting || !uploadFile}
-                    className="px-4 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white font-medium rounded-lg disabled:opacity-50"
-                  >
-                    {submitting ? 'અપલોડ થઈ રહ્યું છે...' : 'અપલોડ & કમ્પ્લીટ કરો'}
-                  </button>
-                </div>
-              </form>
+      <main className="min-w-0 flex-1">
+        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/80 bg-white/90 px-4 py-3 backdrop-blur-xl sm:px-7 lg:px-9">
+          <div>
+            <p className="text-xs font-medium text-slate-500">સેવા વ્યવસ્થાપન / ડેશબોર્ડ</p>
+            <h1 className="mt-0.5 text-lg font-bold text-[#10294d] sm:text-xl">કોમ્પ્યુટર રૂમ હેલ્પડેસ્ક</h1>
+          </div>
+          <div className="flex items-center gap-3 sm:gap-5">
+            <div className="hidden text-right sm:block">
+              <p className="text-xs font-semibold text-slate-700">સેવા પોર્ટલ</p>
+              <p className="mt-0.5 text-[11px] text-slate-400">અતલાદરા મંદિર</p>
+            </div>
+            <button type="button" aria-label="Notifications" className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-slate-50">
+              <Icon name="bell" size={18} />
+              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-[#df9b24]" />
+            </button>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8eff9] text-sm font-bold text-[#153967] ring-2 ring-white">
+              JV
             </div>
           </div>
-        )}
-      </div>
+        </header>
+
+        <div className="mx-auto max-w-[1600px] space-y-5 p-4 sm:p-6 lg:space-y-6 lg:p-8">
+          <section className="relative overflow-hidden rounded-[24px] bg-gradient-to-r from-[#112e54] via-[#183e6a] to-[#285682] px-6 py-7 text-white shadow-[0_14px_38px_rgba(18,48,83,0.18)] sm:px-9 sm:py-8">
+            <div className="pointer-events-none absolute -right-12 -top-24 h-64 w-64 rounded-full border border-white/10" />
+            <div className="pointer-events-none absolute -right-1 top-4 h-44 w-44 rounded-full border border-[#f0bb4f]/25" />
+            <div className="pointer-events-none absolute right-12 top-12 h-24 w-24 rounded-full bg-[#f0bb4f]/10 blur-2xl" />
+            <div className="relative max-w-2xl">
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f4d38f]">
+                <span className="h-px w-7 bg-[#f0bb4f]" /> ડિજિટલ સેવા · સત્સંગની સેવા
+              </p>
+              <h2 className="text-2xl font-bold leading-tight sm:text-3xl">જય સ્વામિનારાયણ, યુવક</h2>
+              <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100/80">
+                કોમ્પ્યુટર રૂમ સેવા ડેશબોર્ડમાં આપનું સ્વાગત છે. સંતો તરફથી આવેલી વિનંતીઓનું સંચાલન અહીંથી કરો.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setFilter('Pending');
+                  document.getElementById('requests')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }}
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-[#f0bb4f] px-4 py-2.5 text-sm font-bold text-[#10294d] shadow-lg shadow-black/10 transition hover:bg-[#f5cc78]"
+              >
+                પેન્ડિંગ વિનંતીઓ જુઓ <Icon name="arrow" size={16} />
+              </button>
+            </div>
+            <div className="absolute bottom-0 right-8 hidden h-32 w-64 items-end justify-center opacity-40 md:flex" aria-hidden="true">
+              <svg viewBox="0 0 240 105" className="h-full w-full text-[#f0bb4f]" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M18 100h204M33 100V61h18v39m139 0V61h18v39M60 100V47h24v53m72 0V47h24v53M88 100V39h64v61M96 39V28l24-20 24 20v11M105 29h30M114 18v21m6-31v53m-79 7V59l11-12 11 12v21m128 0V59l11-12 11 12v21M27 61h34m112 0h34M54 47l6-8 6 8m108 0 6-8 6 8M84 47h72M18 100h204" />
+                <path d="M18 100c0-8 5-12 10-12s10 4 10 12m164 0c0-8 5-12 10-12s10 4 10 12" />
+              </svg>
+            </div>
+          </section>
+
+          {errorMessage && (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {errorMessage}
+              <button type="button" onClick={() => void fetchRequests()} className="ml-3 font-semibold underline">ફરી પ્રયાસ કરો</button>
+            </div>
+          )}
+          {actionError && !selectedRequest && (
+            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{actionError}</div>
+          )}
+
+          <section aria-label="Request statistics" className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+            {[
+              { title: 'કુલ વિનંતીઓ', amount: counts.total, description: 'બધી સેવા વિનંતીઓ', icon: 'file', color: 'amber' },
+              { title: 'પેન્ડિંગ', amount: counts.pending, description: 'સ્વીકારવાની બાકી', icon: 'clock', color: 'rose' },
+              { title: 'ચાલુ કાર્યો', amount: counts.inProgress, description: 'હાલમાં કાર્યરત', icon: 'gear', color: 'blue' },
+              { title: 'પૂર્ણ થયેલ', amount: counts.completed, description: 'સેવા પૂર્ણ થઈ', icon: 'check', color: 'green' },
+            ].map((item) => (
+              <div key={item.title} className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-[0_4px_16px_rgba(20,45,75,0.04)] sm:p-5">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">{item.title}</p>
+                    <p className="mt-2 text-3xl font-bold tracking-tight text-[#122b4c]">{loading ? '—' : item.amount}</p>
+                  </div>
+                  <div className={`flex h-11 w-11 items-center justify-center rounded-2xl ${
+                    item.color === 'amber' ? 'bg-[#fff3d8] text-[#b47a0c]' :
+                    item.color === 'rose' ? 'bg-[#fff0ef] text-[#c65048]' :
+                    item.color === 'blue' ? 'bg-[#eaf3ff] text-[#2875bd]' :
+                    'bg-[#e6f7f0] text-[#168566]'
+                  }`}>
+                    <Icon name={item.icon} size={22} />
+                  </div>
+                </div>
+                <p className="mt-3 text-[11px] text-slate-400">{item.description}</p>
+              </div>
+            ))}
+          </section>
+
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+            <div className="min-w-0 space-y-5">
+              <section id="requests" className="scroll-mt-24 overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-[0_4px_16px_rgba(20,45,75,0.04)]">
+                <div className="flex flex-col gap-3 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <h2 className="font-bold text-[#122b4c]">તાજેતરની વિનંતીઓ</h2>
+                    <p className="mt-1 text-xs text-slate-400">વિનંતીઓનું લાઇવ અપડેટ</p>
+                  </div>
+                  <div className="flex items-center gap-2 self-start rounded-full bg-[#eff9f4] px-3 py-1.5 text-[11px] font-semibold text-[#178565] sm:self-auto">
+                    <span className="relative flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
+                      <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
+                    </span>
+                    લાઇવ સિંક સક્રિય
+                  </div>
+                </div>
+                <div className="flex gap-2 overflow-x-auto border-b border-slate-100 px-5 py-3">
+                  {([
+                    ['All', 'બધી'],
+                    ['Pending', 'પેન્ડિંગ'],
+                    ['In-Progress', 'ચાલુ'],
+                    ['Completed', 'પૂર્ણ'],
+                  ] as [QueueFilter, string][]).map(([key, label]) => (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setFilter(key)}
+                      className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                        filter === key ? 'bg-[#102f55] text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+
+                {loading ? (
+                  <div className="space-y-3 p-5" aria-label="Loading requests">
+                    {[1, 2, 3].map((row) => <div key={row} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}
+                  </div>
+                ) : visibleRequests.length === 0 ? (
+                  <div className="px-5 py-12 text-center">
+                    <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-400"><Icon name="inbox" size={23} /></div>
+                    <p className="mt-3 text-sm font-semibold text-slate-700">અહીં કોઈ વિનંતી નથી</p>
+                    <p className="mt-1 text-xs text-slate-400">નવી વિનંતી આવશે ત્યારે અહીં દેખાશે.</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="hidden overflow-x-auto md:block">
+                      <table className="w-full min-w-[690px] text-left text-xs">
+                        <thead className="bg-[#f8fafc] text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                          <tr>
+                            <th className="px-5 py-3">ટિકિટ / વિનંતી</th>
+                            <th className="px-4 py-3">વિનંતી કરનાર</th>
+                            <th className="px-4 py-3">માધ્યમ</th>
+                            <th className="px-4 py-3">સ્થિતિ</th>
+                            <th className="px-5 py-3">તારીખ</th>
+                            <th className="px-5 py-3 text-right">ક્રિયા</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {visibleRequests.map((request) => (
+                            <tr key={request.id} className="transition hover:bg-slate-50/80">
+                              <td className="px-5 py-4">
+                                <p className="font-semibold text-[#19385e]">{request.subject || request.description}</p>
+                                <p className="mt-1 text-[10px] text-slate-400">{request.ticket_id}</p>
+                                {!!request.request_amendments?.length && (
+                                  <p className="mt-1 max-w-[260px] truncate text-[10px] text-[#a77413]" title={request.request_amendments[request.request_amendments.length - 1].notes}>
+                                    સૂચના: {request.request_amendments[request.request_amendments.length - 1].notes}
+                                  </p>
+                                )}
+                              </td>
+                              <td className="px-4 py-4 text-slate-600">{request.sants?.name || 'સંત'}</td>
+                              <td className="px-4 py-4 text-slate-500">{request.channel}</td>
+                              <td className="px-4 py-4">
+                                <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                                  request.status === 'Pending' ? 'bg-[#fff5dc] text-[#a77413]' :
+                                  request.status === 'In-Progress' ? 'bg-[#eaf3ff] text-[#2774bb]' :
+                                  request.status === 'Completed' ? 'bg-[#e7f7f0] text-[#168363]' :
+                                  'bg-slate-100 text-slate-500'
+                                }`}>{getStatusLabel(request.status)}</span>
+                              </td>
+                              <td className="px-5 py-4 text-slate-500">{formatDate(request.created_at)}</td>
+                              <td className="px-5 py-4 text-right">
+                                {request.status === 'Pending' && (
+                                  <button type="button" onClick={() => void startTask(request.id)} className="whitespace-nowrap rounded-lg bg-[#102f55] px-3 py-2 text-[10px] font-semibold text-white transition hover:bg-[#1c4777]">
+                                    કાર્ય સ્વીકારો
+                                  </button>
+                                )}
+                                {request.status === 'In-Progress' && (
+                                  <button type="button" onClick={() => { setActionError(''); setSelectedRequest(request); }} className="whitespace-nowrap rounded-lg bg-[#16896e] px-3 py-2 text-[10px] font-semibold text-white transition hover:bg-[#11785f]">
+                                    ફાઇલ અપલોડ કરો
+                                  </button>
+                                )}
+                                {(request.status === 'Completed' || request.status === 'Closed_by_Sant') && <span className="text-[10px] text-slate-400">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 md:hidden">
+                      {visibleRequests.map((request) => (
+                        <article key={request.id} className="p-4">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-semibold text-[#19385e]">{request.subject || request.description}</p>
+                              <p className="mt-1 text-[10px] text-slate-400">{request.ticket_id} · {request.sants?.name || 'સંત'}</p>
+                            </div>
+                            <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-semibold ${
+                              request.status === 'Pending' ? 'bg-[#fff5dc] text-[#a77413]' :
+                              request.status === 'In-Progress' ? 'bg-[#eaf3ff] text-[#2774bb]' :
+                              request.status === 'Completed' ? 'bg-[#e7f7f0] text-[#168363]' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>{getStatusLabel(request.status)}</span>
+                          </div>
+                          <div className="mt-3 flex items-center justify-between text-[10px] text-slate-400">
+                            <span>{request.channel}</span><span>{formatDate(request.created_at)}</span>
+                          </div>
+                          {!!request.request_amendments?.length && (
+                            <div className="mt-3 rounded-lg bg-[#fff8e8] px-3 py-2 text-[10px] leading-4 text-[#8d641a]">
+                              નવી સૂચના: {request.request_amendments[request.request_amendments.length - 1].notes}
+                            </div>
+                          )}
+                          {request.status === 'Pending' && (
+                            <button type="button" onClick={() => void startTask(request.id)} className="mt-3 w-full rounded-lg bg-[#102f55] px-3 py-2 text-xs font-semibold text-white">કાર્ય શરૂ કરો</button>
+                          )}
+                          {request.status === 'In-Progress' && (
+                            <button type="button" onClick={() => { setActionError(''); setSelectedRequest(request); }} className="mt-3 w-full rounded-lg bg-[#16896e] px-3 py-2 text-xs font-semibold text-white">ફાઇલ અપલોડ કરો</button>
+                          )}
+                        </article>
+                      ))}
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-slate-100 px-5 py-3">
+                      <p className="text-[11px] text-slate-400">કુલ {visibleRequests.length} વિનંતીઓ</p>
+                      <button type="button" onClick={() => setFilter('All')} className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#2c6da8] hover:text-[#102f55]">
+                        બધી જુઓ <Icon name="arrow" size={13} />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </section>
+
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_16px_rgba(20,45,75,0.04)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-[#122b4c]">સેવા પ્રવાહ</h2>
+                    <p className="mt-1 text-xs text-slate-400">વિનંતીથી પૂર્ણતા સુધીની પ્રગતિ</p>
+                  </div>
+                  <div className="rounded-xl bg-[#fff5df] p-2.5 text-[#b47a0c]"><Icon name="spark" size={19} /></div>
+                </div>
+                <div className="mt-5 grid grid-cols-3 gap-2">
+                  {[
+                    { label: 'મળેલી', number: counts.total, color: 'bg-[#e9a929]' },
+                    { label: 'ચાલુ', number: counts.inProgress, color: 'bg-[#2e82cc]' },
+                    { label: 'પૂર્ણ', number: counts.completed, color: 'bg-[#159b78]' },
+                  ].map((step, index) => (
+                    <div key={step.label} className="relative rounded-xl bg-[#f8fafc] px-3 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className={`h-2.5 w-2.5 rounded-full ${step.color}`} />
+                        <span className="text-[11px] font-medium text-slate-500">{step.label}</span>
+                      </div>
+                      <p className="mt-2 text-xl font-bold text-[#15365c]">{loading ? '—' : step.number}</p>
+                      {index < 2 && <span className="absolute -right-1 top-1/2 z-10 hidden -translate-y-1/2 text-slate-300 sm:block">›</span>}
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </div>
+
+            <aside className="space-y-5">
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_16px_rgba(20,45,75,0.04)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-[#122b4c]">કાર્ય સ્થિતિ</h2>
+                    <p className="mt-1 text-xs text-slate-400">વિનંતીઓનું વિતરણ</p>
+                  </div>
+                  <button type="button" aria-label="Refresh requests" onClick={() => void fetchRequests()} className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-100 hover:text-[#153967]">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M20 7v5h-5M4 17v-5h5" /><path d="M5.6 9a7 7 0 0 1 11.7-2L20 12M4 12l2.7 5a7 7 0 0 0 11.7-2" /></svg>
+                  </button>
+                </div>
+                <div className="mt-6 flex items-center justify-center">
+                  <div className="relative flex h-40 w-40 items-center justify-center rounded-full" style={chartStyle}>
+                    <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
+                      <span className="text-3xl font-bold text-[#122b4c]">{loading ? '—' : chartTotal}</span>
+                      <span className="mt-0.5 text-[10px] text-slate-400">કુલ કાર્યો</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-5 space-y-3">
+                  {[
+                    { label: 'પેન્ડિંગ', amount: counts.pending, color: 'bg-[#e9a929]' },
+                    { label: 'ચાલુ છે', amount: counts.inProgress, color: 'bg-[#2e82cc]' },
+                    { label: 'પૂર્ણ', amount: counts.completed, color: 'bg-[#159b78]' },
+                  ].map((item) => (
+                    <div key={item.label} className="flex items-center justify-between text-xs">
+                      <span className="flex items-center gap-2 text-slate-600"><span className={`h-2.5 w-2.5 rounded-full ${item.color}`} />{item.label}</span>
+                      <span className="font-bold text-[#17375c]">{loading ? '—' : item.amount}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_4px_16px_rgba(20,45,75,0.04)]">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-bold text-[#122b4c]">તમારા આગળના કાર્યો</h2>
+                    <p className="mt-1 text-xs text-slate-400">ધ્યાન આપવા જેવી વિનંતીઓ</p>
+                  </div>
+                  <span className="rounded-lg bg-[#fff5df] px-2.5 py-1 text-[10px] font-bold text-[#a77413]">{counts.pending + counts.inProgress} બાકી</span>
+                </div>
+                <div className="mt-4 space-y-1">
+                  {requests.filter((request) => request.status === 'Pending' || request.status === 'In-Progress').slice(0, 5).map((request, index) => (
+                    <div key={request.id} className="flex items-start gap-3 rounded-xl px-2 py-3 transition hover:bg-slate-50">
+                      <div className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+                        index % 3 === 0 ? 'bg-[#fff0db] text-[#bd7c12]' : index % 3 === 1 ? 'bg-[#e8f1ff] text-[#3479bd]' : 'bg-[#e8f7f1] text-[#168566]'
+                      }`}>{(request.sants?.name || 'સ').slice(0, 1)}</div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-semibold text-[#17375c]">{request.subject || request.description}</p>
+                        <p className="mt-1 truncate text-[10px] text-slate-400">{request.sants?.name || 'સંત'} · {request.ticket_id}</p>
+                        <div className="mt-2">
+                          {request.status === 'Pending' ? (
+                            <button type="button" onClick={() => void startTask(request.id)} className="text-[10px] font-bold text-[#3479bd] hover:underline">કાર્ય સ્વીકારો →</button>
+                          ) : (
+                            <button type="button" onClick={() => { setActionError(''); setSelectedRequest(request); }} className="text-[10px] font-bold text-[#168566] hover:underline">પૂર્ણ કરવા અપલોડ કરો →</button>
+                          )}
+                        </div>
+                      </div>
+                      <span className={`mt-1 h-2 w-2 shrink-0 rounded-full ${request.status === 'Pending' ? 'bg-[#e9a929]' : 'bg-[#2e82cc]'}`} />
+                    </div>
+                  ))}
+                  {!loading && requests.every((request) => request.status !== 'Pending' && request.status !== 'In-Progress') && (
+                    <div className="rounded-xl bg-[#f8fafc] px-3 py-6 text-center text-xs text-slate-400">આગળ કોઈ કાર્ય બાકી નથી. સરસ સેવા!</div>
+                  )}
+                  {loading && [1, 2, 3].map((row) => <div key={row} className="h-14 animate-pulse rounded-xl bg-slate-100" />)}
+                </div>
+              </section>
+
+              <div className="rounded-2xl border border-[#f0dfbc] bg-gradient-to-br from-[#fff9eb] to-[#fffdf8] p-4">
+                <p className="text-xs font-semibold text-[#8d641a]">સેવામાં જ સુખ</p>
+                <p className="mt-1 text-[11px] leading-5 text-[#927d58]">દરેક નાની સેવા પણ ભક્તિનો અમૂલ્ય ભાગ છે.</p>
+              </div>
+            </aside>
+          </div>
+
+          <footer className="flex flex-col items-center justify-between gap-2 border-t border-slate-200 px-2 py-4 text-[10px] text-slate-400 sm:flex-row">
+            <span>© BAPS Atladara Computer Room · Digital Helpdesk</span>
+            <span className="flex items-center gap-1.5"><span className="text-[#c88e24]">ૐ</span> સત્સંગની સેવામાં ટેકનોલોજી</span>
+          </footer>
+        </div>
+      </main>
+
+      {selectedRequest && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[#081a31]/55 p-4 backdrop-blur-sm"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget && !submitting) {
+              setSelectedRequest(null);
+              setUploadFile(null);
+              setActionError('');
+            }
+          }}
+        >
+          <div role="dialog" aria-modal="true" aria-labelledby="complete-title" className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#e7f7f0] text-[#168566]">
+              <Icon name="file" size={23} />
+            </div>
+            <h2 id="complete-title" className="text-lg font-bold text-[#122b4c]">કાર્ય પૂર્ણ કરો</h2>
+            <p className="mt-1 text-xs text-slate-400">{selectedRequest.ticket_id} · {selectedRequest.sants?.name || 'સંત'}</p>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              તૈયાર થયેલ ફાઇલ સંતના Google Drive shared folder માં અપલોડ થશે.
+            </p>
+
+            {actionError && <div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">{actionError}</div>}
+
+            <form onSubmit={handleCompleteTask} className="mt-5">
+              <label htmlFor="complete-file" className="mb-2 block text-xs font-semibold text-slate-700">તૈયાર થયેલ ફાઇલ</label>
+              <input
+                id="complete-file"
+                type="file"
+                required
+                onChange={(event) => setUploadFile(event.target.files?.[0] || null)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 p-2.5 text-xs text-slate-500 file:mr-3 file:rounded-lg file:border-0 file:bg-[#eaf3ff] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[#2469a5] hover:file:bg-[#deebfa]"
+              />
+              <div className="mt-6 flex justify-end gap-2">
+                <button
+                  type="button"
+                  disabled={submitting}
+                  onClick={() => {
+                    setSelectedRequest(null);
+                    setUploadFile(null);
+                    setActionError('');
+                  }}
+                  className="rounded-xl px-4 py-2.5 text-xs font-semibold text-slate-500 transition hover:bg-slate-100 disabled:opacity-50"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting || !uploadFile}
+                  className="rounded-xl bg-[#16896e] px-4 py-2.5 text-xs font-bold text-white shadow-md shadow-emerald-900/10 transition hover:bg-[#11785f] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {submitting ? 'અપલોડ થઈ રહ્યું છે…' : 'અપલોડ અને પૂર્ણ કરો'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
