@@ -17,7 +17,8 @@ export async function loginAction(formData: FormData) {
   });
 
   if (error || !authData.user) {
-    return { error: 'ઈમેલ અથવા પાસવર્ડ અમાન્ય છે.' };
+    console.error("Supabase Login Auth Error:", error.message, error.status);
+    return { error: error.message };
   }
 
   // ૨. યુઝરનો રોલ અને સ્થિતિ તપાસવી
