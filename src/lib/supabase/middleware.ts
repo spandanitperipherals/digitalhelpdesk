@@ -26,22 +26,24 @@ export async function updateSession(request: NextRequest) {
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options });
+          request.cookies.set({ name, value, '', ...options });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.set({ name, value: '', ...options });
+          response.cookies.set({ name, value, '', ...options });
         },
       },
     }
   );
 
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // ૧. જો યુઝર લોગિન ન હોય અને સુરક્ષિત પેજ એક્સેસ કરવાનો પ્રયત્ન કરે
+  // ૧. જો યુઝર લોગિન ન હોય અને સુરક્ષિત પાથ ખોલવાનો પ્રયાસ કરે
   if (!user && (path.startsWith('/admin') || path.startsWith('/yuvak'))) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -49,7 +51,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ૨. જો યુઝર લોગિન હોય ત્યારે રોલ-બેઝ્ડ એક્સેસ કંટ્રોલ (RBAC)
+  // ૨. જો યુઝર લોગિન હોય અને રોલ ચેક કરવો હોય
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -57,7 +59,6 @@ export async function updateSession(request: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    // જો એકાઉન્ટ નિષ્ક્રિય (Inactive) હોય
     if (profile && !profile.is_active && path !== '/login') {
       await supabase.auth.signOut();
       const url = request.nextUrl.clone();
@@ -66,14 +67,14 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // યુવક એડમિન સેક્શનમાં ન જઈ શકે
+    // યુવક એડમિન પેજ ન ખોલી શકે
     if (path.startsWith('/admin') && profile?.role !== 'admin') {
       const url = request.nextUrl.clone();
       url.pathname = '/yuvak/queue';
       return NextResponse.redirect(url);
     }
 
-    // જો પહેલેથી લોગિન હોય અને /login પેજ ખોલે તો સીધા ડેશબોર્ડ પર રીડાયરેક્ટ કરવું
+    // જો પહેલેથી લોગિન હોય અને /login ખોલે તો રીડાયરેક્ટ કરવું
     if (path === '/login') {
       const url = request.nextUrl.clone();
       url.pathname = profile?.role === 'admin' ? '/admin/sants' : '/yuvak/queue';

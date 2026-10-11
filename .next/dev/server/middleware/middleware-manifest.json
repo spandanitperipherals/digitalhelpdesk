@@ -4,12 +4,12 @@
     "/": {
       "files": [
         "server/edge/chunks/node_modules_next_dist_1tt18q3i41usq._.js",
-        "server/edge/chunks/[root-of-the-server]__13jvavz1mxlei._.js",
-        "server/edge/chunks/turbopack-node_modules_next_dist_esm_build_templates_edge-wrapper_0txprbcbqe7-m.js"
+        "server/edge/chunks/[root-of-the-server]__01hc-tz9zek3x._.js",
+        "server/edge/chunks/turbopack-node_modules_next_dist_esm_build_templates_edge-wrapper_0g7s_w_vsjyaa.js"
       ],
       "name": "middleware",
       "page": "/",
-      "entrypoint": "server/edge/chunks/turbopack-node_modules_next_dist_esm_build_templates_edge-wrapper_0txprbcbqe7-m.js",
+      "entrypoint": "server/edge/chunks/turbopack-node_modules_next_dist_esm_build_templates_edge-wrapper_0g7s_w_vsjyaa.js",
       "matchers": [
         {
           "regexp": "/:nextData(_next/data/[^/]{1,})?/((?!_next/static|_next/image|favicon.ico|api/webhooks).*){(\\.json|\\.rsc|\\.segments/.+\\.segment\\.rsc)}?",
