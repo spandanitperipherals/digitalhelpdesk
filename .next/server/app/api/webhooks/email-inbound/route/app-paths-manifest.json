@@ -1,0 +1,3 @@
+{
+  "/api/webhooks/email-inbound/route": "app/api/webhooks/email-inbound/route.js"
+}

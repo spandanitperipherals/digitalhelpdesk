@@ -1,0 +1,13 @@
+var R=require("../../../../chunks/ssr/[turbopack]_runtime.js")("server/app/(dashboard)/admin/sants/page.js")
+R.c("server/chunks/ssr/[root-of-the-server]__0ny_oas414ep9._.js")
+R.c("server/chunks/ssr/node_modules_next_dist_esm_build_templates_app-page_1j6v6k5nxxgss.js")
+R.c("server/chunks/ssr/node_modules_next_dist_compiled_@edge-runtime_cookies_index_1kiz_an963mbg.js")
+R.c("server/chunks/ssr/node_modules_next_dist_1qrfck6kfdp-h._.js")
+R.c("server/chunks/ssr/node_modules_next_dist_0janj0i6dqko7._.js")
+R.c("server/chunks/ssr/[root-of-the-server]__1a91ucu_h_7kg._.js")
+R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_forbidden_0symwr9mbf-fh.js")
+R.c("server/chunks/ssr/node_modules_next_dist_client_components_builtin_unauthorized_0l_sp0xky89qu.js")
+R.c("server/chunks/ssr/node_modules_next_dist_1c5t_vsn6u8fr._.js")
+R.c("server/chunks/ssr/_next-internal_server_app_(dashboard)_admin_sants_page_actions_0av-7nl01xrdq.js")
+R.m(64876)
+module.exports=R.m(64876).exports
