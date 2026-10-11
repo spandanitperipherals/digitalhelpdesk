@@ -1,2 +1,2 @@
-{"timestamp":"00:00:03.236","source":"Server","level":"ERROR","message":"Unexpected token \""}
-{"timestamp":"00:00:03.351","source":"Server","level":"ERROR","message":"Unhandled Rejection: SyntaxError: Unexpected token \""}
+{"timestamp":"00:00:05.735","source":"Server","level":"ERROR","message":"Unexpected token \""}
+{"timestamp":"00:00:05.891","source":"Server","level":"ERROR","message":"Unhandled Rejection: SyntaxError: Unexpected token \""}
