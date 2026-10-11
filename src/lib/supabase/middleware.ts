@@ -43,7 +43,6 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // ૧. લોગિન વગર સુરક્ષિત રૂટ એક્સેસ કરવા પર રીડાયરેક્ટ
   if (!user && (path.startsWith('/admin') || path.startsWith('/yuvak'))) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -51,7 +50,6 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ૨. રોલ-બેઝ્ડ રીડાયરેક્શન
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')

@@ -1,10 +1,10 @@
-import { createServerClient as createSupabaseServerClient, type CookieOptions } from '@supabase/ssr';
+import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { cookies } from 'next/headers';
 
 export async function createClient() {
   const cookieStore = await cookies();
 
-  return createSupabaseServerClient(
+  return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
@@ -15,15 +15,15 @@ export async function createClient() {
         set(name: string, value: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value, ...options });
-          } catch (error) {
-            // Server Component context fallback
+          } catch {
+            // Server Component context
           }
         },
         remove(name: string, options: CookieOptions) {
           try {
             cookieStore.set({ name, value: '', ...options });
-          } catch (error) {
-            // Server Component context fallback
+          } catch {
+            // Server Component context
           }
         },
       },
@@ -31,5 +31,4 @@ export async function createClient() {
   );
 }
 
-// એલિઆસ એક્સપોર્ટ ઉમેરો જેથી બંને નામો માન્ય રહે
-export const createServerClient = createClient;
+export const createServerClientInstance = createClient;

@@ -29,24 +29,52 @@ function LoginForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
       <input type="hidden" name="redirectTo" value={redirectTo} />
 
       {(errorMessage || errorParam === 'invalid') && (
-        <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-rose-700 text-xs font-semibold flex items-center gap-2">
+        <div
+          style={{
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca',
+            color: '#b91c1c',
+            padding: '10px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
           <span>⚠️</span>
-          <span>ઈમેલ અથવા પાસવર્ડ અમાન્ય છે.</span>
+          <span>{errorMessage || 'ઈમેલ અથવા પાસવર્ડ અમાન્ય છે.'}</span>
         </div>
       )}
 
-      {/* Email Input */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">
+        <label
+          style={{
+            display: 'block',
+            fontSize: '12px',
+            fontWeight: 700,
+            color: '#334155',
+            marginBottom: '6px',
+          }}
+        >
           નોંધાયેલ ઈમેલ (Email) *
         </label>
-        <div className="relative">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">
-            📧
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span
+            style={{
+              position: 'absolute',
+              left: '12px',
+              color: '#94a3b8',
+              fontSize: '14px',
+              pointerEvents: 'none',
+            }}
+          >
+            👤
           </span>
           <input
             type="email"
@@ -54,18 +82,43 @@ function LoginForm() {
             required
             autoComplete="email"
             placeholder="admin@mandir.local"
-            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all shadow-sm"
+            style={{
+              width: '100%',
+              padding: '10px 12px 10px 38px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '8px',
+              fontSize: '14px',
+              color: '#0f172a',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
           />
         </div>
       </div>
 
-      {/* Password Input */}
       <div>
-        <label className="block text-xs font-bold text-slate-700 mb-1">
+        <label
+          style={{
+            display: 'block',
+            fontSize: '12px',
+            fontWeight: 700,
+            color: '#334155',
+            marginBottom: '6px',
+          }}
+        >
           પાસવર્ડ (Password) *
         </label>
-        <div className="relative">
-          <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400 text-sm">
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+          <span
+            style={{
+              position: 'absolute',
+              left: '12px',
+              color: '#94a3b8',
+              fontSize: '14px',
+              pointerEvents: 'none',
+            }}
+          >
             🔒
           </span>
           <input
@@ -74,26 +127,41 @@ function LoginForm() {
             required
             autoComplete="current-password"
             placeholder="••••••••"
-            className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition-all shadow-sm"
+            style={{
+              width: '100%',
+              padding: '10px 12px 10px 38px',
+              backgroundColor: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '8px',
+              fontSize: '14px',
+              color: '#0f172a',
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
           />
         </div>
       </div>
 
-      {/* Button */}
-      <div className="pt-2">
+      <div style={{ paddingTop: '8px' }}>
         <button
           type="submit"
           disabled={loading}
-          className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-lg text-sm font-bold text-white bg-[#0f172a] hover:bg-[#1e293b] active:bg-black focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 transition-all shadow-md"
+          style={{
+            width: '100%',
+            padding: '12px 16px',
+            backgroundColor: '#0f172a',
+            backgroundImage: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)',
+            color: '#ffffff',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: '14px',
+            fontWeight: 700,
+            cursor: loading ? 'not-allowed' : 'pointer',
+            opacity: loading ? 0.7 : 1,
+            boxShadow: '0 4px 12px rgba(15, 23, 42, 0.15)',
+          }}
         >
-          {loading ? (
-            <span className="flex items-center gap-2">
-              <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-              પ્રમાણીકરણ ચાલુ છે...
-            </span>
-          ) : (
-            'સુરક્ષિત લોગિન (Sign In)'
-          )}
+          {loading ? 'પ્રમાણીકરણ ચાલુ છે...' : 'સુરક્ષિત લોગિન (Sign In)'}
         </button>
       </div>
     </form>
@@ -103,81 +171,153 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <div
-      className="min-h-screen bg-[#fcf9f2] flex flex-col justify-center items-center py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden"
       style={{
-        backgroundImage: 'radial-gradient(circle at top right, rgba(245, 158, 11, 0.05), transparent)',
+        minHeight: '100vh',
+        backgroundColor: '#faf7ee',
+        backgroundImage: 'radial-gradient(circle at 50% 0%, #fff7ed 0%, #faf7ee 70%)',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '24px 16px',
+        fontFamily: 'system-ui, -apple-system, sans-serif',
+        position: 'relative',
+        boxSizing: 'border-box',
       }}
     >
-      {/* Background traditional border graphics for corners */}
-      <div className="absolute top-0 left-0 w-24 h-24 md:w-36 md:h-36 border-t-4 border-l-4 border-amber-500/10 m-4 rounded-tl-2xl pointer-events-none hidden sm:block"></div>
-      <div className="absolute bottom-0 right-0 w-24 h-24 md:w-36 md:h-36 border-b-4 border-r-4 border-amber-500/10 m-4 rounded-br-2xl pointer-events-none hidden sm:block"></div>
-
-      {/* Traditional Temple Side Panels (Desktop only) */}
-      <div className="hidden lg:flex absolute left-6 top-1/2 -translate-y-1/2 flex-col items-center opacity-30 text-center max-w-[160px]">
-        <div className="text-3xl text-amber-600 mb-1">🕌</div>
-        <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">BAPS Mandir Atladara</p>
-        <p className="text-[10px] text-slate-500 font-medium">Computer Room</p>
-        <div className="w-10 h-[1px] bg-amber-500/30 my-2"></div>
-        <p className="text-[10px] text-amber-700 italic">Technology in Service of Satsang</p>
+      <div
+        style={{
+          width: '44px',
+          height: '44px',
+          borderRadius: '50%',
+          backgroundColor: '#fffbeb',
+          border: '1.5px solid #fde68a',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#b45309',
+          fontSize: '22px',
+          fontWeight: 700,
+          marginBottom: '16px',
+          boxShadow: '0 2px 8px rgba(217, 119, 6, 0.15)',
+        }}
+      >
+        ૐ
       </div>
 
-      <div className="hidden lg:flex absolute right-6 top-1/2 -translate-y-1/2 flex-col items-center opacity-30 text-center max-w-[160px]">
-        <div className="text-3xl text-amber-600 mb-1">🕌</div>
-        <p className="text-xs font-bold text-slate-800 uppercase tracking-wider">BAPS Mandir Atladara</p>
-        <p className="text-[10px] text-slate-500 font-medium">Computer Room</p>
-        <div className="w-10 h-[1px] bg-amber-500/30 my-2"></div>
-        <p className="text-[10px] text-amber-700 italic">Technology in Service of Satsang</p>
-      </div>
-
-      {/* Centered Oum Badge */}
-      <div className="mb-3">
-        <div className="w-10 h-10 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-700 font-bold text-lg shadow-sm">
-          ૐ
-        </div>
-      </div>
-
-      {/* Main Login Card Container */}
-      <div className="bg-white py-8 px-6 sm:px-10 shadow-xl rounded-2xl border border-amber-100 max-w-md w-full relative z-10">
-        
-        {/* Logo and Brand Header */}
-        <div className="text-center pb-5 border-b border-slate-100 mb-5">
-          <div className="flex justify-center items-center gap-2 mb-3">
-            <div className="w-7 h-7 rounded-full bg-rose-600 border border-amber-400 flex items-center justify-center text-white text-[9px] font-bold">
+      <div
+        style={{
+          backgroundColor: '#ffffff',
+          borderRadius: '20px',
+          border: '1px solid #fef3c7',
+          boxShadow: '0 20px 40px -15px rgba(180, 83, 9, 0.08), 0 0 25px rgba(0,0,0,0.04)',
+          maxWidth: '440px',
+          width: '100%',
+          padding: '36px 32px',
+          boxSizing: 'border-box',
+          position: 'relative',
+          zIndex: 2,
+        }}
+      >
+        <div
+          style={{
+            textAlign: 'center',
+            borderBottom: '1px solid #f1f5f9',
+            paddingBottom: '20px',
+            marginBottom: '20px',
+          }}
+        >
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '10px',
+              marginBottom: '10px',
+            }}
+          >
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                backgroundColor: '#dc2626',
+                border: '2px solid #f59e0b',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                fontSize: '9px',
+                fontWeight: 900,
+                letterSpacing: '0.5px',
+              }}
+            >
               BAPS
             </div>
-            <div className="text-left">
-              <h1 className="text-xs font-bold text-slate-900 leading-none">BAPS Swaminarayan Mandir</h1>
-              <span className="text-[9px] font-bold text-amber-600 tracking-wider uppercase">Atladara • Computer Room Helpdesk Portal</span>
+            <div style={{ textAlign: 'left' }}>
+              <div style={{ fontSize: '14px', fontWeight: 800, color: '#0f172a', lineHeight: 1.1 }}>
+                BAPS Swaminarayan Mandir
+              </div>
+              <div
+                style={{
+                  fontSize: '9px',
+                  fontWeight: 700,
+                  color: '#d97706',
+                  letterSpacing: '0.6px',
+                  textTransform: 'uppercase',
+                  marginTop: '2px',
+                }}
+              >
+                Atladara • Computer Room Helpdesk
+              </div>
             </div>
           </div>
-          
-          <h2 className="text-xl font-bold text-slate-900 tracking-wide mt-2">
+
+          <h2
+            style={{
+              fontSize: '19px',
+              fontWeight: 800,
+              color: '#0f172a',
+              margin: '12px 0 4px 0',
+            }}
+          >
             સ્વામિનારાયણ મંદિર કોમ્પ્યુટર વર્કશોપ
           </h2>
-          <p className="text-xs text-slate-500 font-medium mt-0.5">
-            આઇ.ટી. એડમિન અને યુવક પોર્ટલ લોગીન
+          <p style={{ fontSize: '12px', color: '#64748b', margin: '0 0 6px 0' }}>
+            આઈ.ટી. એડમિન અને યુવક પોર્ટલ લોગીન
           </p>
-          <p className="text-[10px] text-amber-600 italic font-medium mt-1.5">
+          <p
+            style={{
+              fontSize: '11px',
+              color: '#d97706',
+              fontStyle: 'italic',
+              margin: 0,
+              fontWeight: 500,
+            }}
+          >
             “In the service of Shri Swaminarayan”
           </p>
         </div>
 
-        {/* Suspense Wraps Form */}
-        <Suspense fallback={<div className="text-center py-6 text-sm text-slate-400">લોડ થઈ રહ્યું છે...</div>}>
+        <Suspense fallback={<div style={{ textAlign: 'center', padding: '16px', color: '#94a3b8' }}>લોડ થઈ રહ્યું છે...</div>}>
           <LoginForm />
         </Suspense>
 
-        {/* Support Text */}
-        <div className="mt-6 border-t border-slate-100 pt-4 text-center">
-          <p className="text-[10px] text-slate-500 leading-relaxed">
-            સેવા વ્યવસ્થાપન અર્થે સુરક્ષિત પ્રણાલી.
+        <div
+          style={{
+            marginTop: '24px',
+            borderTop: '1px solid #f1f5f9',
+            paddingTop: '16px',
+            textAlign: 'center',
+          }}
+        >
+          <p style={{ fontSize: '11px', color: '#64748b', margin: 0, lineHeight: 1.5 }}>
+            પૂજ્ય સંતોના આધ્યાત્મિક નિયમોનું પાલન અને સેવા વ્યવસ્થાપન અર્થે સુરક્ષિત પ્રણાલી.
           </p>
         </div>
       </div>
-      
-      {/* Footer copyright */}
-      <div className="mt-5 text-[9px] text-slate-400 text-center font-medium">
-        © 2026 BAPS Swaminarayan Sanstha.
+
+      <div style={{ marginTop: '20px', fontSize: '10px', color: '#94a3b8', textAlign: 'center' }}>
+        © 2026 BAPS Swaminarayan Sanstha. All rights reserved.
       </div>
     </div>
   );

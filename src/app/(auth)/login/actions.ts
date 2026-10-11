@@ -4,7 +4,7 @@ import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
 export async function loginAction(formData: FormData) {
-  const email = formData.get('email') as string;
+  const email = (formData.get('email') as string)?.trim();
   const password = formData.get('password') as string;
   const redirectTo = formData.get('redirectTo') as string;
 
@@ -17,8 +17,8 @@ export async function loginAction(formData: FormData) {
   });
 
   if (error || !authData.user) {
-    console.error("Supabase Login Auth Error:", error.message, error.status);
-    return { error: error.message };
+    console.error('Supabase Login Auth Error:', error?.message);
+    return { error: error?.message || 'ઈમેલ અથવા પાસવર્ડ અમાન્ય છે.' };
   }
 
   // ૨. યુઝરનો રોલ અને સ્થિતિ તપાસવી
