@@ -26,13 +26,13 @@ export async function updateSession(request: NextRequest) {
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value, '', ...options });
+          request.cookies.set({ name, value: '', ...options });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.set({ name, value, '', ...options });
+          response.cookies.set({ name, value: '', ...options });
         },
       },
     }
@@ -43,7 +43,7 @@ export async function updateSession(request: NextRequest) {
   } = await supabase.auth.getUser();
   const path = request.nextUrl.pathname;
 
-  // ૧. જો યુઝર લોગિન ન હોય અને સુરક્ષિત પાથ ખોલવાનો પ્રયાસ કરે
+  // ૧. લોગિન વગર સુરક્ષિત રૂટ એક્સેસ કરવા પર રીડાયરેક્ટ
   if (!user && (path.startsWith('/admin') || path.startsWith('/yuvak'))) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -51,7 +51,7 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ૨. જો યુઝર લોગિન હોય અને રોલ ચેક કરવો હોય
+  // ૨. રોલ-બેઝ્ડ રીડાયરેક્શન
   if (user) {
     const { data: profile } = await supabase
       .from('profiles')
@@ -67,14 +67,12 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    // યુવક એડમિન પેજ ન ખોલી શકે
     if (path.startsWith('/admin') && profile?.role !== 'admin') {
       const url = request.nextUrl.clone();
       url.pathname = '/yuvak/queue';
       return NextResponse.redirect(url);
     }
 
-    // જો પહેલેથી લોગિન હોય અને /login ખોલે તો રીડાયરેક્ટ કરવું
     if (path === '/login') {
       const url = request.nextUrl.clone();
       url.pathname = profile?.role === 'admin' ? '/admin/sants' : '/yuvak/queue';

@@ -8,10 +8,10 @@ const supabaseAdmin = createClient(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const requestId = params.id;
+    const { id: requestId } = await context.params;
     const { amendment_type, notes, attachment_urls } = await req.json();
 
     // ૧. રિક્વેસ્ટ અસ્તિત્વમાં છે કે નહીં તે ચકાસવું

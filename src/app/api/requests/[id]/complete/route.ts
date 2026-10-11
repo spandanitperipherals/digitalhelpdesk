@@ -9,10 +9,10 @@ const supabaseAdmin = createClient(
 
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const requestId = params.id;
+    const { id: requestId } = await context.params;
     const formData = await req.formData();
     const file = formData.get('file') as File;
     const yuvakId = formData.get('yuvak_id') as string;

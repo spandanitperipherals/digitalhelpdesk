@@ -8,7 +8,7 @@ export async function loginAction(formData: FormData) {
   const password = formData.get('password') as string;
   const redirectTo = formData.get('redirectTo') as string;
 
-  const supabase = createClient();
+  const supabase = await createClient();
 
   // ૧. Supabase Auth માં લોગિન
   const { data: authData, error } = await supabase.auth.signInWithPassword({
@@ -42,7 +42,7 @@ export async function loginAction(formData: FormData) {
 }
 
 export async function logoutAction() {
-  const supabase = createClient();
+  const supabase = await createClient();
   await supabase.auth.signOut();
   redirect('/login');
 }
