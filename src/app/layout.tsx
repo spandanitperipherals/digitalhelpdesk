@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
-import './globals.css';
+import './globals.css'; // જો આ ફાઈલ `src/app/globals.css` માં હોય તો આ સાચું છે
 
 export const metadata: Metadata = {
   title: 'સ્વામિનારાયણ મંદિર કોમ્પ્યુટર વર્કશોપ',
-  description: 'Digital Helpdesk System',
+  description: 'BAPS Atladara Computer Room Helpdesk Portal',
 };
 
 export default function RootLayout({
@@ -13,7 +13,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="gu">
-      <body className="antialiased min-h-screen bg-slate-50 text-slate-900">
+      <body className="antialiased min-h-screen bg-[#fcf9f2] text-slate-900">
         {children}
       </body>
     </html>
