@@ -45,3 +45,21 @@ Commit 00000033 2 keys in 8ms 417µs 600ns
 FAM | META SEQ | SST SEQ         | RANGE
   0 | 00000032 | 00000031 SST    |                                                                             O                        | c44bdff4074eecdb-c44bdff4074eecdb (0 MiB, fresh, 38 bytes, 1 entries, 0 tombstones)
   1 | 00000033 | 00000030 SST    |                      O                                                                               | 36f790e3e3a5d943-36f790e3e3a5d943 (0 MiB, fresh, 120 bytes, 1 entries, 0 tombstones)
+Time 2026-10-11T11:24:02.3381317Z
+Commit 00000039 139 keys in 258ms 119µs 700ns
+FAM | META SEQ | SST SEQ         | RANGE
+  0 | 00000037 | 00000036 SST    |                                                                             O                        | c44bdff4074eecdb-c44bdff4074eecdb (0 MiB, fresh, 38 bytes, 1 entries, 0 tombstones)
+  1 | 00000038 | 00000035 SST    | [==================================================================================================] | 000763231cb0df05-ff078261c00f822a (0 MiB, fresh, 21714 bytes, 125 entries, 0 tombstones)
+  2 | 00000039 | 00000034 SST    | [=========================================================================================]          | 025a36768cf9486a-e81b6aa217b4cb12 (0 MiB, fresh, 18777 bytes, 13 entries, 0 tombstones)
+  1 | 00000041 | Compaction:
+  1 | 00000041 | MERGE (126 keys):
+  1 | 00000041 | 00000030 INPUT  |                      O                                                                               | 36f790e3e3a5d943-36f790e3e3a5d943
+  1 | 00000041 | 00000035 INPUT  | [==================================================================================================] | 000763231cb0df05-ff078261c00f822a
+  1 | 00000041 | 00000040 OUTPUT | [==================================================================================================] | 000763231cb0df05-ff078261c00f822a (compacted)
+Time 2026-10-11T11:24:02.6182543Z
+Commit 00000042 126 keys in 201ms 829µs 200ns
+FAM | META SEQ | SST SEQ         | RANGE
+  1 | 00000041 | 00000040 SST    | [==================================================================================================] | 000763231cb0df05-ff078261c00f822a (0 MiB, compacted, 21775 bytes, 126 entries, 0 tombstones)
+  1 | 00000041 | 00000030 00000035 OBSOLETE SST
+    |          | 00000030 00000035 SST DELETED
+    |          | 00000033 00000038 META DELETED
