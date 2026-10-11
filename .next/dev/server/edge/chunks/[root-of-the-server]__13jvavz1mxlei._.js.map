@@ -1,0 +1,6 @@
+{
+  "version": 3,
+  "sources": [],
+  "sections": [
+    {"offset": {"line": 16, "column": 0}, "map": {"version":3,"sources":["file:///D:/Dev/digitalhelpdesk/src/middleware.ts"],"sourcesContent":["import { type NextRequest } from 'next/server';\r\nimport { updateSession } from '@/lib/supabase/middleware';\r\n\r\nexport async function middleware(request: NextRequest) {\r\n  return await updateSession(request);\r\n}\r\n\r\nexport const config = {\r\n  matcher: [\r\n    /*\r\n     * નીચેના રૂટ્સ સિવાયના તમામ પાથ પર મિડલવેર ચાલશે:\r\n     * - _next/static (static files)\r\n     * - _next/image (image optimization files)\r\n     * - favicon.ico (favicon file)\r\n     * - api/webhooks (Telegram & Email Inbound APIs જેને પબ્લિક રાખવાના છે)\r\n     */\r\n    '/((?!_next/static|_next/image|favicon.ico|api/webhooks).*)',\r\n  ],\r\n};"],"names":["middleware","request","updateSession","config","matcher"],"mappings":";;;;;;;;;;;;AAGO,eAAeA,WAAWC,OAAoB;IACnD,OAAO,MAAMC,cAAcD;AAC7B;AAEO,MAAME,SAAS;IACpBC,SAAS;QACP;;;;;;KAMC,GACD;KACD;AACH"}}]
+}
