@@ -1,5 +1,7 @@
 'use server';
 
+export const runtime = 'nodejs';
+
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
 
@@ -8,9 +10,16 @@ export async function loginAction(formData: FormData) {
   const password = formData.get('password') as string;
   const redirectTo = formData.get('redirectTo') as string;
 
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    console.error('CRITICAL: Supabase environment variables are missing from Vercel runtime!');
+    return { error: 'સર્વર કનેક્શન સેટિંગ્સ ઉપલબ્ધ નથી (Missing Env Vars).' };
+  }
+
   const supabase = await createClient();
 
-  // ૧. Supabase Auth માં લોગિન
   const { data: authData, error } = await supabase.auth.signInWithPassword({
     email,
     password,
@@ -21,29 +30,22 @@ export async function loginAction(formData: FormData) {
     return { error: error?.message || 'ઈમેલ અથવા પાસવર્ડ અમાન્ય છે.' };
   }
 
-  // ૨. યુઝરનો રોલ અને સ્થિતિ તપાસવી
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('profiles')
     .select('role, is_active')
     .eq('id', authData.user.id)
     .single();
 
-  if (!profile || !profile.is_active) {
+  if (profileError || !profile || !profile.is_active) {
+    console.error('Profile check error:', profileError?.message);
     await supabase.auth.signOut();
-    return { error: 'આપનું એકાઉન્ટ નિષ્ક્રિય છે. કૃપા કરીને એડમિનનો સંપર્ક કરો.' };
+    return { error: 'આપનું એકાઉન્ટ નિષ્ક્રિય છે અથવા પ્રોફાઇલ મળેલ નથી.' };
   }
 
-  // ૩. રીડાયરેક્ટ પાથ નક્કી કરવો
   let targetPath = profile.role === 'admin' ? '/admin/sants' : '/yuvak/queue';
   if (redirectTo && redirectTo.startsWith('/')) {
     targetPath = redirectTo;
   }
 
   redirect(targetPath);
-}
-
-export async function logoutAction() {
-  const supabase = await createClient();
-  await supabase.auth.signOut();
-  redirect('/login');
 }
