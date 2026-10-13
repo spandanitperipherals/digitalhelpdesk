@@ -4,6 +4,9 @@ import './globals.css'; // જો આ ફાઈલ `src/app/globals.css` મા�
 export const metadata: Metadata = {
   title: 'સ્વામિનારાયણ મંદિર કોમ્પ્યુટર વર્કશોપ',
   description: 'BAPS Atladara Computer Room Helpdesk Portal',
+  icons: {
+    icon: '/images.png',
+  },
 };
 
 export default function RootLayout({
