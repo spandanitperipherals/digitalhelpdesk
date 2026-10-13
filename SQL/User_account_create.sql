@@ -47,3 +47,29 @@ BEGIN
         ON CONFLICT (id) DO NOTHING;
     END IF;
 END $$;
+
+INSERT INTO auth.identities (
+    id,
+    provider_id,
+    user_id,
+    identity_data,
+    provider,
+    created_at,
+    updated_at
+)
+SELECT
+    users.id,
+    users.id::text,
+    users.id,
+    jsonb_build_object('sub', users.id::text, 'email', users.email),
+    'email',
+    COALESCE(users.created_at, NOW()),
+    COALESCE(users.updated_at, NOW())
+FROM auth.users AS users
+WHERE users.email IN ('admin@mandir.local', 'yuvak@mandir.local')
+  AND NOT EXISTS (
+      SELECT 1
+      FROM auth.identities AS identities
+      WHERE identities.user_id = users.id
+        AND identities.provider = 'email'
+  );
