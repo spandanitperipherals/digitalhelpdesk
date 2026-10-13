@@ -1,6 +1,24 @@
 import { createServerClient, type CookieOptions } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
 
+// JWT પેલોડ ડીકોડ કરવા માટેનું હેલ્પર ફંક્શન
+function parseJwt(token: string | undefined) {
+  if (!token) return null;
+  try {
+    const base64Url = token.split('.')[1];
+    const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+    const jsonPayload = decodeURIComponent(
+      atob(base64)
+        .split('')
+        .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+        .join('')
+    );
+    return JSON.parse(jsonPayload);
+  } catch {
+    return null;
+  }
+}
+
 export async function updateSession(request: NextRequest) {
   let response = NextResponse.next({
     request: {
@@ -26,23 +44,26 @@ export async function updateSession(request: NextRequest) {
           response.cookies.set({ name, value, ...options });
         },
         remove(name: string, options: CookieOptions) {
-          request.cookies.set({ name, value: '', ...options });
+          request.cookies.set({ name, value, '', ...options });
           response = NextResponse.next({
             request: {
               headers: request.headers,
             },
           });
-          response.cookies.set({ name, value: '', ...options });
+          response.cookies.set({ name, value, '', ...options });
         },
       },
     }
   );
 
+  // સુરક્ષિત યુઝર ઓથેન્ટિકેશન
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
   const path = request.nextUrl.pathname;
 
+  // ૧. જો યુઝર લૉગિન ન હોય અને પ્રોટેક્ટેડ રૂટ એક્સેસ કરે
   if (!user && (path.startsWith('/admin') || path.startsWith('/yuvak'))) {
     const url = request.nextUrl.clone();
     url.pathname = '/login';
@@ -50,14 +71,19 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
+  // ૨. જો યુઝર લૉગિન હોય
   if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role, is_active')
-      .eq('id', user.id)
-      .single();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
 
-    if (profile && !profile.is_active && path !== '/login') {
+    // Access Token Hook ના કસ્ટમ ક્લેમ્સ મેળવો
+    const jwtPayload = parseJwt(session?.access_token);
+    const role: string = jwtPayload?.user_role || (user as any)?.user_role || 'yuvak';
+    const isActive: boolean = jwtPayload?.is_active ?? true;
+
+    // જો એકાઉન્ટ નિષ્ક્રિય હોય
+    if (!isActive && path !== '/login') {
       await supabase.auth.signOut();
       const url = request.nextUrl.clone();
       url.pathname = '/login';
@@ -65,15 +91,17 @@ export async function updateSession(request: NextRequest) {
       return NextResponse.redirect(url);
     }
 
-    if (path.startsWith('/admin') && profile?.role !== 'admin') {
+    // જો નોન-એડમિન યુઝર એડમિન પેનલ એક્સેસ કરવાનો પ્રયત્ન કરે
+    if (path.startsWith('/admin') && role !== 'admin') {
       const url = request.nextUrl.clone();
       url.pathname = '/yuvak/queue';
       return NextResponse.redirect(url);
     }
 
+    // જો લૉગિન થયેલો યુઝર ફરીથી /login પેજ ખોલે તો રીડાયરેક્ટ કરો
     if (path === '/login') {
       const url = request.nextUrl.clone();
-      url.pathname = profile?.role === 'admin' ? '/admin/sants' : '/yuvak/queue';
+      url.pathname = role === 'admin' ? '/admin/sants' : '/yuvak/queue';
       return NextResponse.redirect(url);
     }
   }
