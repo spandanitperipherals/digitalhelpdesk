@@ -1,4 +1,4 @@
-import AdminDashboardHub from '../../../../components/admin/AdminDashboardHub';
+import AdminDashboardHub from 'src/app/components/admin/AdminDashboardHub.tsx';
 
 export const metadata = {
   title: 'એડમિન ડેશબોર્ડ | BAPS હેલ્પડેસ્ક વડોદરા',
