@@ -11,8 +11,8 @@ import {
   Users,
   type LucideIcon,
 } from "lucide-react";
-import { createClient } from "@/lib/supabase/client";
-import { Tilt3DCard, TiltLayer } from "@/components/ui/Tilt3DCard";
+import { createClient } from "src/lib/supabase/client.ts";
+import { Tilt3DCard, TiltLayer } from "src/app/components/ui/Tilt3DCard.tsx";
 
 /* -------------------------------------------------------------------------- */
 /* Data source                                                                */
