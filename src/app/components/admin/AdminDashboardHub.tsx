@@ -21,7 +21,7 @@ import { Tilt3DCard, TiltLayer } from "@/components/ui/Tilt3DCard";
 
 const TABLES = {
   sants: "sants",
-  yuvaks: "yuvaks",
+  yuvaks: "profiles",
   dispatchLogs: "dispatch_logs",
 } as const;
 
