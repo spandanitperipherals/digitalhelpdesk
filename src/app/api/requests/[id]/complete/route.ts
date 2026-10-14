@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@/lib/supabase/server';
 import { uploadFileToSantFolder } from '@/lib/google-drive';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// રૂટને ડાયનેમિક જાહેર કરો જેથી બિલ્ડ સમયે સ્ટેટિક પેજ ડેટા કલેક્શન ફેલ ન થાય
+export const dynamic = 'force-dynamic';
 
 export async function POST(
   req: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const supabase = await createClient();
     const { id: requestId } = await context.params;
     const formData = await req.formData();
     const file = formData.get('file') as File;
@@ -22,7 +21,7 @@ export async function POST(
     }
 
     // ૧. રિક્વેસ્ટ અને સંબંધિત સંતની ફોલ્ડર લિંક મેળવવી
-    const { data: request, error: reqErr } = await supabaseAdmin
+    const { data: request, error: reqErr } = await supabase
       .from('service_requests')
       .select('id, ticket_id, sant_id, sants(name, shared_folder_link)')
       .eq('id', requestId)
@@ -52,7 +51,7 @@ export async function POST(
     });
 
     // ૩. Documents ટેબલમાં એન્ટ્રી કરવી
-    await supabaseAdmin.from('documents').insert({
+    await supabase.from('documents').insert({
       request_id: request.id,
       file_name: uploadResult.fileName,
       file_url: uploadResult.viewUrl,
@@ -60,7 +59,7 @@ export async function POST(
     });
 
     // ૪. રિક્વેસ્ટને Completed માર્ક કરવી
-    await supabaseAdmin
+    await supabase
       .from('service_requests')
       .update({
         status: 'Completed',
