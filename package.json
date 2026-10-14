@@ -8,10 +8,11 @@
     "start": "next start",
     "lint": "next lint"
   },
-  "dependencies": {
+"dependencies": {
     "@supabase/ssr": "^0.5.2",
     "@supabase/supabase-js": "^2.48.1",
     "framer-motion": "^11.18.2",
+    "googleapis": "^144.0.0",
     "lucide-react": "^0.475.0",
     "next": "16.4.0",
     "react": "^18.3.1",
