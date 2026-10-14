@@ -1,11 +1,17 @@
+'use client';
+
+import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { createClient } from '@/lib/supabase/client';
 import { 
   Users, 
   FolderSync, 
   Send, 
   BarChart3, 
   Webhook, 
-  LogOut 
+  LogOut,
+  Loader2 
 } from 'lucide-react';
 
 export default function AdminLayout({
@@ -13,6 +19,22 @@ export default function AdminLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const supabase = createClient();
+
+  const handleLogout = async () => {
+    try {
+      setLoggingOut(true);
+      await supabase.auth.signOut();
+      router.push('/login');
+      router.refresh();
+    } catch (error) {
+      console.error('Logout error:', error);
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex bg-slate-100 text-slate-800">
       {/* Sidebar Navigation */}
@@ -66,15 +88,26 @@ export default function AdminLayout({
           </nav>
         </div>
 
-        {/* Logout */}
+        {/* Client-Side Logout Button */}
         <div className="p-4 border-t border-slate-800">
-          <Link
-            href="/login"
-            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-rose-950/40 rounded-lg transition"
+          <button
+            type="button"
+            onClick={handleLogout}
+            disabled={loggingOut}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-rose-400 hover:bg-rose-950/40 rounded-lg transition disabled:opacity-50"
           >
-            <LogOut size={16} />
-            <span>લૉગ આઉટ</span>
-          </Link>
+            {loggingOut ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>લૉગ આઉટ થઈ રહ્યું છે...</span>
+              </>
+            ) : (
+              <>
+                <LogOut size={16} />
+                <span>લૉગ આઉટ</span>
+              </>
+            )}
+          </button>
         </div>
       </aside>
 
