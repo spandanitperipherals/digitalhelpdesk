@@ -10,10 +10,8 @@ export default function YuvakLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="w-full min-h-screen bg-slate-950/40 p-4 sm:p-6 md:p-8">
-      <div className="mx-auto max-w-7xl">
-        {children}
-      </div>
+    <div className="min-h-screen w-full bg-[#f4f7fb]">
+      {children}
     </div>
   );
 }
