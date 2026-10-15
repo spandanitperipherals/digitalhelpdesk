@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import { uploadFileToSantFolder } from '@/lib/google-drive';
 
 // રૂટને ડાયનેમિક જાહેર કરો જેથી બિલ્ડ સમયે સ્ટેટિક પેજ ડેટા કલેક્શન ફેલ ન થાય
+// Vercel serverless execution timeout
+export const maxDuration = 60;
 export const dynamic = 'force-dynamic';
 
 export async function POST(

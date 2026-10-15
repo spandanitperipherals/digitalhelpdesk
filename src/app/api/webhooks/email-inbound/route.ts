@@ -1,99 +1,79 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { google } from 'googleapis';
 
-// Service role client bypasses RLS for automated background webhooks
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
+
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GMAIL_CLIENT_ID,
+  process.env.GMAIL_CLIENT_SECRET,
+  'https://developers.google.com/oauthplayground'
+);
+
+oauth2Client.setCredentials({
+  refresh_token: process.env.GMAIL_REFRESH_TOKEN,
+});
+
+const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
 
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { from, subject, text, messageId, attachments } = body;
 
-    // ૧. મોકલનાર ઈમેલ પરથી સંતની વિગત મેળવવી
-    const senderEmail = from.toLowerCase().trim();
-    const { data: sant, error: santErr } = await supabaseAdmin
-      .from('sants')
-      .select('id, name, shared_folder_link')
-      .eq('email', senderEmail)
-      .single();
-
-    if (santErr || !sant) {
-      return NextResponse.json(
-        { error: 'Unregistered sender email' },
-        { status: 403 }
-      );
+    // Pub/Sub સંદેશો ડીકોડ કરવો
+    if (!body?.message?.data) {
+      return NextResponse.json({ ok: true });
     }
 
-    // ૨. ચકાસણી: શું આ ઈમેલ હાલની ટિકિટ (દા.ત. SR-1024) નો રિપ્લાય/અમેન્ડમેન્ટ છે?
-    const ticketMatch = subject.match(/SR-(\d+)/i);
-
-    if (ticketMatch) {
-      const ticketId = ticketMatch[0].toUpperCase();
-      const { data: request } = await supabaseAdmin
-        .from('service_requests')
-        .select('id, status')
-        .eq('ticket_id', ticketId)
-        .single();
-
-      if (request && request.status !== 'Completed') {
-        // જો સંત "CLOSE" લખીને મોકલે તો સેલ્ફ-ક્લોઝ કરવું
-        if (text.toLowerCase().includes('close')) {
-          await supabaseAdmin
-            .from('service_requests')
-            .update({ status: 'Closed_by_Sant', updated_at: new Date().toISOString() })
-            .eq('id', request.id);
-
-          await supabaseAdmin.from('request_amendments').insert({
-            request_id: request.id,
-            type: 'cancel',
-            notes: 'Closed by Sant via Email reply',
-          });
-
-          return NextResponse.json({ message: 'Request closed by Sant' });
-        }
-
-        // અન્યથા સુધારો/વધારાની ફાઇલો જોડવી (Amendment)
-        await supabaseAdmin.from('request_amendments').insert({
-          request_id: request.id,
-          type: attachments?.length ? 'add_doc' : 'modify',
-          notes: text,
-          attachment_urls: attachments || [],
-        });
-
-        await supabaseAdmin
-          .from('service_requests')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('id', request.id);
-
-        return NextResponse.json({ message: 'Amendment recorded successfully' });
-      }
-    }
-
-    // ૩. જો નવો ઈમેલ હોય તો નવી સર્વિસ રિક્વેસ્ટ બનાવવી
-    const { data: newRequest, error: reqErr } = await supabaseAdmin
-      .from('service_requests')
-      .insert({
-        sant_id: sant.id,
-        channel: 'Email',
-        subject: subject || 'No Subject',
-        description: text || '',
-        source_email_message_id: messageId,
-        status: 'Pending',
-      })
-      .select()
-      .single();
-
-    if (reqErr) throw reqErr;
-
-    return NextResponse.json({
-      success: true,
-      ticket_id: newRequest.ticket_id,
-      message: 'Service request created',
+    // તાજેતરના મેસેજનું લિસ્ટ મેળવવું
+    const res = await gmail.users.messages.list({
+      userId: 'me',
+      maxResults: 1,
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+
+    const messages = res.data.messages;
+    if (!messages || messages.length === 0) {
+      return NextResponse.json({ ok: true });
+    }
+
+    const latestMessage = await gmail.users.messages.get({
+      userId: 'me',
+      id: messages[0].id!,
+    });
+
+    const headers = latestMessage.data.payload?.headers || [];
+    const fromHeader = headers.find((h) => h.name?.toLowerCase() === 'from')?.value || '';
+    const subject = headers.find((h) => h.name?.toLowerCase() === 'subject')?.value || 'ઈમેલ દ્વારા નવી વિનંતી';
+    const snippet = latestMessage.data.snippet || '';
+
+    // ઈમેલ મોકલનાર સંતને ડેટાબેઝમાં મેચ કરો
+    const fromEmail = fromHeader.match(/<([^>]+)>/)?.[1] || fromHeader;
+    const { data: sant } = await supabaseAdmin
+      .from('sants')
+      .select('id')
+      .ilike('email', fromEmail)
+      .maybeSingle();
+
+    // નવી ટિકિટ જનરેટ કરવી
+    const ticketSeq = Math.floor(1000 + Math.random() * 9000);
+    const ticketId = `BAPS-EM-${ticketSeq}`;
+
+    await supabaseAdmin.from('service_requests').insert({
+      ticket_id: ticketId,
+      subject: subject,
+      description: snippet,
+      status: 'Pending',
+      channel: 'Email',
+      sant_id: sant?.id || null,
+      created_at: new Date().toISOString(),
+    });
+
+    return NextResponse.json({ ok: true, ticket_id: ticketId });
+  } catch (error: any) {
+    console.error('Gmail Webhook Error:', error);
+    return NextResponse.json({ ok: true }); // લૂપ અટકાવવા 200 રિસ્પોન્સ
   }
 }
