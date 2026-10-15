@@ -1,133 +1,150 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
+// ૧. બ્રાઉઝરમાં સીધું ખોલતાં 405 ને બદલે 200 OK આપશે (Healthcheck)
+export async function GET() {
+  return NextResponse.json({ 
+    status: 'online', 
+    message: 'BAPS Telegram Webhook is actively running on Vercel!' 
+  });
+}
+
+// Supabase Admin Client
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 );
 
-const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN!;
-const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
-
-// Telegram પર મેસેજ મોકલવા માટેનું હેલ્પર ફંક્શન
-async function sendTelegramMessage(chatId: number | string, text: string) {
-  await fetch(`${TELEGRAM_API_URL}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: chatId,
-      text: text,
-      parse_mode: 'HTML',
-    }),
-  });
+async function sendTelegramMessage(botToken: string, chatId: number | string, text: string) {
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text,
+        parse_mode: 'HTML',
+      }),
+    });
+    const result = await res.json();
+    if (!result.ok) {
+      console.error('Telegram API error response:', result);
+    }
+  } catch (err) {
+    console.error('Telegram fetch error:', err);
+  }
 }
 
 export async function POST(req: NextRequest) {
   try {
-    const update = await req.json();
+    const body = await req.json();
+    console.log('Incoming Telegram Payload:', JSON.stringify(body));
 
-    // જો સામાન્ય ટેક્સ્ટ મેસેજ ન હોય તો ઇગ્નોર કરવો
-    if (!update.message || !update.message.text) {
-      return NextResponse.json({ ok: true });
+    // ૧. મેસેજ વિગત મેળવો
+    const message = body?.message || body?.edited_message;
+    if (!message) {
+      return NextResponse.json({ ok: true, note: 'No message in update' });
     }
 
-    const chatId = update.message.chat.id;
-    const text = update.message.text.trim();
-    const telegramUsername = update.message.from.username;
+    const chatId = message.chat?.id?.toString();
+    const senderUsername = message.from?.username || '';
+    const senderName = [message.from?.first_name, message.from?.last_name].filter(Boolean).join(' ') || 'પૂજ્ય સંત / સેવક';
+    const messageText = (message.text || message.caption || '').trim();
 
-    // ૧. ટેલિગ્રામ કોન્ટેક્ટ અથવા ઓથેન્ટિકેશન વેરિફિકેશન
-    // અહીં સંતના રજિસ્ટર્ડ મોબાઈલ/ઈમેલ સાથે સંતની ઓળખ થશે
-    const { data: sant, error: santErr } = await supabaseAdmin
-      .from('sants')
-      .select('id, name, shared_folder_link')
-      .eq('is_active', true)
-      .limit(1)
-      .single(); // પ્રોડક્શનમાં sant_auth માંથી chatId સાથે લિંક કરેલ સંત લેવો
-
-    if (santErr || !sant) {
-      await sendTelegramMessage(
-        chatId,
-        'જય સ્વામિનારાયણ 🙏\nઆપનો નંબર સિસ્ટમમાં રજિસ્ટર્ડ નથી. કૃપા કરીને આઈ.ટી. એડમિનનો સંપર્ક કરો.'
-      );
-      return NextResponse.json({ ok: true });
+    if (!chatId) {
+      return NextResponse.json({ ok: true, note: 'No chatId found' });
     }
 
-    // ૨. અમેન્ડમેન્ટ અથવા સેલ્ફ-ક્લોઝર ચેક (દા.ત. SR-1001 લખેલું હોય)
-    const ticketMatch = text.match(/SR-(\d+)/i);
-
-    if (ticketMatch) {
-      const ticketId = ticketMatch[0].toUpperCase();
-      const { data: request } = await supabaseAdmin
-        .from('service_requests')
-        .select('id, status')
-        .eq('ticket_id', ticketId)
-        .single();
-
-      if (request && request.status !== 'Completed') {
-        // જો મેસેજમાં "CLOSE" અથવા "રદ" લખેલું હોય
-        if (text.toLowerCase().includes('close') || text.includes('રદ')) {
-          await supabaseAdmin
-            .from('service_requests')
-            .update({ status: 'Closed_by_Sant', updated_at: new Date().toISOString() })
-            .eq('id', request.id);
-
-          await supabaseAdmin.from('request_amendments').insert({
-            request_id: request.id,
-            type: 'cancel',
-            notes: 'Closed by Sant via Telegram',
-          });
-
-          await sendTelegramMessage(
-            chatId,
-            `જય સ્વામિનારાયણ 🙏\n\nઆપની સેવા વિનંતી <b>${ticketId}</b> આપના નિર્દેશ મુજબ બંધ (Closed) કરવામાં આવી છે.`
-          );
-          return NextResponse.json({ ok: true });
-        }
-
-        // અન્યથા વધારાની સૂચના ઉમેરવી (Amendment)
-        await supabaseAdmin.from('request_amendments').insert({
-          request_id: request.id,
-          type: 'modify',
-          notes: text,
-        });
-
-        await supabaseAdmin
-          .from('service_requests')
-          .update({ updated_at: new Date().toISOString() })
-          .eq('id', request.id);
-
-        await sendTelegramMessage(
-          chatId,
-          `જય સ્વામિનારાયણ 🙏\n\nઆપની વિનંતી <b>${ticketId}</b> માં નવી સૂચના સફળતાપૂર્વક ઉમેરી દેવામાં આવી છે.`
-        );
-        return NextResponse.json({ ok: true });
+    // ૨. બોટ ટોકન મેળવો (Vercel Env અથવા system_settings)
+    let botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      const { data: tokenSetting } = await supabaseAdmin
+        .from('system_settings')
+        .select('value')
+        .eq('key', 'telegram_bot_token')
+        .maybeSingle();
+      if (tokenSetting?.value) {
+        botToken = tokenSetting.value;
       }
     }
 
-    // ૩. નવી સર્વિસ રિક્વેસ્ટ બનાવવી
-    const { data: newRequest, error: reqErr } = await supabaseAdmin
+    if (!botToken) {
+      console.error('CRITICAL: TELEGRAM_BOT_TOKEN is missing!');
+      return NextResponse.json({ ok: false, error: 'Missing TELEGRAM_BOT_TOKEN' }, { status: 500 });
+    }
+
+    // ૩. /start કમાન્ડ માટે સ્પેશિયલ વેલકમ
+    if (messageText === '/start') {
+      const welcomeText = 
+        `🙏 <b>જય સ્વામિનારાયણ</b>\n\n` +
+        `BAPS અટલાદરા કોમ્પ્યુટર રૂમ હેલ્પડેસ્ક સેવામાં આપનું હાર્દિક સ્વાગત છે.\n\n` +
+        `આપની કોઈપણ સેવા વિનંતી (ફાઇલ પ્રિન્ટ, ટાઇપિંગ, ડ્રાઇવ અપલોડ) અહીં મેસેજ સ્વરૂપે મોકલો. સિસ્ટમ આપમેળે નવી ટિકિટ જનરેટ કરશે.`;
+      
+      await sendTelegramMessage(botToken, chatId, welcomeText);
+      return NextResponse.json({ ok: true, note: 'Sent welcome message' });
+    }
+
+    if (!messageText) {
+      await sendTelegramMessage(botToken, chatId, 'કૃપા કરીને આપની વિનંતી ટેક્સ્ટ સ્વરૂપે લખીને મોકલો.');
+      return NextResponse.json({ ok: true, note: 'Empty text' });
+    }
+
+    // ૪. ડેટાબેઝમાં સંત સાથે મેચ કરવાનો પ્રયાસ
+    let santId: number | null = null;
+    let displayName = senderName;
+
+    const { data: sant } = await supabaseAdmin
+      .from('sants')
+      .select('id, name')
+      .or(`telegram_chat_id.eq.${chatId},telegram_username.ilike.${senderUsername}`)
+      .limit(1)
+      .maybeSingle();
+
+    if (sant) {
+      santId = sant.id;
+      displayName = sant.name;
+    }
+
+    // ૫. રેન્ડમ ટિકિટ ID
+    const ticketSeq = Math.floor(1000 + Math.random() * 9000);
+    const ticketId = `BAPS-TG-${ticketSeq}`;
+
+    // ૬. service_requests ટેબલમાં નવી ટિકિટ ઉમેરો
+    const { error: insertError } = await supabaseAdmin
       .from('service_requests')
       .insert({
-        sant_id: sant.id,
-        channel: 'Telegram',
-        subject: text.slice(0, 40) + '...',
-        description: text,
+        ticket_id: ticketId,
+        subject: messageText.length > 60 ? `${messageText.slice(0, 60)}...` : messageText,
+        description: messageText,
         status: 'Pending',
-      })
-      .select()
-      .single();
+        channel: 'Telegram',
+        sant_id: santId,
+        created_at: new Date().toISOString(),
+      });
 
-    if (reqErr) throw reqErr;
+    if (insertError) {
+      console.error('Supabase Insert Error:', insertError);
+      await sendTelegramMessage(
+        botToken, 
+        chatId, 
+        `⚠️ વિનંતી નોંધવામાં ક્ષતિ થઈ: ${insertError.message}`
+      );
+      return NextResponse.json({ ok: false, error: insertError.message }, { status: 500 });
+    }
 
-    // સંતને સ્વીકૃતિ મેસેજ (Acknowledgement) મોકલવો
-    await sendTelegramMessage(
-      chatId,
-      `જય સ્વામિનારાયણ ${sant.name} 🙏\n\nઆપની સેવા વિનંતી નોંધાઈ ગઈ છે.\n<b>ટિકિટ નંબર: ${newRequest.ticket_id}</b>\n\nયુવક દ્વારા કાર્ય શરૂ થતાં જ આપને અપડેટ મળશે.`
-    );
+    // ૭. કન્ફર્મેશન રિપ્લાય મોકલો
+    const replyText = 
+      `🙏 <b>જય સ્વામિનારાયણ, ${displayName}</b>\n\n` +
+      `આપની સેવા વિનંતી સફળતાપૂર્વક નોંધાઈ ગઈ છે.\n` +
+      `📌 <b>ટિકિટ નંબર:</b> <code>${ticketId}</code>\n` +
+      `⏳ <b>સ્થિતિ:</b> પેન્ડિંગ (કતારમાં મુકાયેલ)\n\n` +
+      `યુવક સેવા ડેસ્ક દ્વારા ટૂંક સમયમાં કાર્યવાહી કરવામાં આવશે.`;
 
-    return NextResponse.json({ ok: true });
+    await sendTelegramMessage(botToken, chatId, replyText);
+
+    return NextResponse.json({ ok: true, ticket_id: ticketId });
   } catch (err: any) {
-    console.error('Telegram Webhook Error:', err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error('Catch Error in Telegram Webhook:', err);
+    return NextResponse.json({ ok: false, error: err.message }, { status: 500 });
   }
 }
