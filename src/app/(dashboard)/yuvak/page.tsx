@@ -1,174 +1,96 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
-import { UserPlus, Shield, UserCheck, UserX, Loader2, Search } from 'lucide-react';
+import { Clock, CheckCircle2, PlayCircle, FileText, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 
-interface Profile {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'yuvak';
-  is_active: boolean;
-}
-
-export default function YuvaksPage() {
-  const [profiles, setProfiles] = useState<Profile[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-
+export default function YuvakDashboardPage() {
   const supabase = createClient();
+  const [stats, setStats] = useState({
+    total: 0,
+    pending: 0,
+    in_progress: 0,
+    completed: 0,
+  });
 
   useEffect(() => {
-    fetchProfiles();
+    async function loadStats() {
+      // dispatch_logs અથવા વિનંતીઓના ટેબલમાંથી આંકડા મેળવો
+      const { data: logs } = await supabase.from('dispatch_logs').select('status');
+      if (logs) {
+        setStats({
+          total: logs.length,
+          pending: logs.filter((l) => l.status === 'pending').length,
+          in_progress: logs.filter((l) => l.status === 'in_progress' || l.status === 'processing').length,
+          completed: logs.filter((l) => l.status === 'completed' || l.status === 'dispatched').length,
+        });
+      }
+    }
+    loadStats();
   }, []);
-
-  async function fetchProfiles() {
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, name, email, role, is_active')
-      .order('name');
-    if (!error && data) {
-      setProfiles(data as Profile[]);
-    }
-    setLoading(false);
-  }
-
-  // એક્ટિવ / ઇનએક્ટિવ સ્ટેટસ ટોગલ
-  async function toggleStatus(id: string, currentStatus: boolean) {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ is_active: !currentStatus })
-      .eq('id', id);
-
-    if (!error) {
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, is_active: !currentStatus } : p))
-      );
-    } else {
-      alert(`ભૂલ: ${error.message}`);
-    }
-  }
-
-  // રોલ બદલવા માટે (Admin <-> Yuvak)
-  async function updateRole(id: string, newRole: 'admin' | 'yuvak') {
-    const { error } = await supabase
-      .from('profiles')
-      .update({ role: newRole })
-      .eq('id', id);
-
-    if (!error) {
-      setProfiles((prev) =>
-        prev.map((p) => (p.id === id ? { ...p, role: newRole } : p))
-      );
-    } else {
-      alert(`ભૂલ: ${error.message}`);
-    }
-  }
-
-  const filtered = profiles.filter(
-    (p) =>
-      p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      p.email?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">યુવક ઓનબોર્ડિંગ & રોલ મેનેજમેન્ટ</h1>
-          <p className="text-sm text-slate-500">સેવા આપતા યુવકોની યાદી, સક્રિય સ્થિતિ અને અધિકાર ફાળવણી</p>
+      {/* Hero Welcome Card */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-blue-900 to-indigo-950 p-6 md:p-8 border border-white/10 shadow-xl">
+        <div className="relative z-10 max-w-2xl">
+          <span className="inline-block px-3 py-1 rounded-full text-xs font-semibold bg-amber-400/20 text-amber-300 border border-amber-400/30 mb-3">
+            ડિજિટલ સેવા • સત્સંગની સેવા
+          </span>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white mb-2">
+            જય સ્વામિનારાયણ, યુવક
+          </h1>
+          <p className="text-sm text-slate-300 mb-6 leading-relaxed">
+            કોમ્પ્યુટર રૂમ સેવા ડેશબોર્ડમાં આપનું સ્વાગત છે. પૂજ્ય સંતો તરફથી આવેલી વિનંતીઓનું સંચાલન અહીંથી કરો.
+          </p>
+          <Link
+            href="/yuvak/queue"
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-semibold text-slate-950 hover:bg-amber-400 shadow-lg shadow-amber-500/20 transition"
+          >
+            <span>પેન્ડિંગ વિનંતીઓ જુઓ</span>
+            <ArrowRight size={16} />
+          </Link>
         </div>
       </div>
 
-      {/* સર્ચ બાર */}
-      <div className="relative max-w-md">
-        <Search className="absolute left-3 top-2.5 text-slate-400" size={18} />
-        <input
-          type="text"
-          placeholder="નામ અથવા ઈમેલ વડે શોધો..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="w-full pl-10 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        />
-      </div>
+      {/* Stats Counter Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 backdrop-blur-xl">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-medium">કુલ વિનંતીઓ</span>
+            <FileText size={18} className="text-amber-400" />
+          </div>
+          <div className="text-3xl font-bold text-white">{stats.total}</div>
+          <span className="text-[11px] text-slate-500 mt-1 block">બધી સેવા વિનંતીઓ</span>
+        </div>
 
-      {/* યુવકોનું ટેબલ */}
-      <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold">
-            <tr>
-              <th className="py-3 px-4">નામ</th>
-              <th className="py-3 px-4">ઈમેલ</th>
-              <th className="py-3 px-4">રોલ (Role)</th>
-              <th className="py-3 px-4">સ્થિતિ</th>
-              <th className="py-3 px-4 text-right">ક્રિયા (Action)</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {loading ? (
-              <tr>
-                <td colSpan={5} className="py-12 text-center text-slate-400">
-                  <Loader2 className="animate-spin mx-auto mb-2" size={24} />
-                  વિગતો લોડ થઈ રહી છે...
-                </td>
-              </tr>
-            ) : filtered.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="py-8 text-center text-slate-500">
-                  કોઈ રેકોર્ડ મળ્યો નથી.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((user) => (
-                <tr key={user.id} className="hover:bg-slate-50/50">
-                  <td className="py-3 px-4 font-medium text-slate-800">{user.name || '—'}</td>
-                  <td className="py-3 px-4 text-slate-600">{user.email}</td>
-                  <td className="py-3 px-4">
-                    <select
-                      value={user.role}
-                      onChange={(e) => updateRole(user.id, e.target.value as 'admin' | 'yuvak')}
-                      className={`text-xs font-semibold px-2.5 py-1 rounded-md border ${
-                        user.role === 'admin'
-                          ? 'bg-purple-50 text-purple-700 border-purple-200'
-                          : 'bg-blue-50 text-blue-700 border-blue-200'
-                      }`}
-                    >
-                      <option value="yuvak">Yuvak</option>
-                      <option value="admin">Admin</option>
-                    </select>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span
-                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                        user.is_active
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-rose-100 text-rose-700'
-                      }`}
-                    >
-                      <span className={`w-1.5 h-1.5 rounded-full ${user.is_active ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                      {user.is_active ? 'એક્ટિવ' : 'નિષ્ક્રિય'}
-                    </span>
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => toggleStatus(user.id, user.is_active)}
-                      className={`p-1.5 rounded-lg border text-xs font-medium transition ${
-                        user.is_active
-                          ? 'border-rose-200 text-rose-600 hover:bg-rose-50'
-                          : 'border-emerald-200 text-emerald-600 hover:bg-emerald-50'
-                      }`}
-                      title={user.is_active ? 'નિષ્ક્રિય કરો' : 'સક્રિય કરો'}
-                    >
-                      {user.is_active ? <UserX size={15} /> : <UserCheck size={15} />}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 backdrop-blur-xl">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-medium">પેન્ડિંગ</span>
+            <Clock size={18} className="text-rose-400" />
+          </div>
+          <div className="text-3xl font-bold text-white">{stats.pending}</div>
+          <span className="text-[11px] text-slate-500 mt-1 block">સ્વીકારવાની બાકી</span>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 backdrop-blur-xl">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-medium">ચાલુ કાર્યો</span>
+            <PlayCircle size={18} className="text-sky-400" />
+          </div>
+          <div className="text-3xl font-bold text-white">{stats.in_progress}</div>
+          <span className="text-[11px] text-slate-500 mt-1 block">હાલમાં કાર્યરત</span>
+        </div>
+
+        <div className="rounded-2xl border border-white/10 bg-slate-900/60 p-5 backdrop-blur-xl">
+          <div className="flex items-center justify-between text-slate-400 mb-2">
+            <span className="text-xs font-medium">પૂર્ણ થયેલ</span>
+            <CheckCircle2 size={18} className="text-emerald-400" />
+          </div>
+          <div className="text-3xl font-bold text-white">{stats.completed}</div>
+          <span className="text-[11px] text-slate-500 mt-1 block">સેવા પૂર્ણ થઈ</span>
+        </div>
       </div>
     </div>
   );
