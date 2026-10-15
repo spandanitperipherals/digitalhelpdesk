@@ -281,6 +281,15 @@ export default function YuvakQueuePage() {
     event.preventDefault();
     if (!selectedRequest || !uploadFile) return;
 
+    // ૧. Vercel લિમિટ (4.5 MB) માટે ક્લાયન્ટ-સાઇડ ચેક
+    const MAX_SIZE_MB = 4.2;
+    if (uploadFile.size > MAX_SIZE_MB * 1024 * 1024) {
+      setActionError(
+        `ફાઈલનું કદ ઘણું મોટું (${(uploadFile.size / (1024 * 1024)).toFixed(1)} MB) છે. Vercel સર્વર મર્યાદા 4.2 MB છે. કૃપા કરીને ફાઈલ કમ્પ્રેસ કરો અથવા નાની ફાઈલ પસંદ કરો.`
+      );
+      return;
+    }
+
     setSubmitting(true);
     setActionError('');
     const formData = new FormData();
@@ -291,10 +300,22 @@ export default function YuvakQueuePage() {
         method: 'POST',
         body: formData,
       });
-      const result = await response.json();
+
+      // ૨. સેફ રિસ્પોન્સ રીડિંગ (પ્લેઇન ટેક્સ્ટ કે JSON બંને હેન્ડલ થશે)
+      const rawText = await response.text();
+      let result: any = {};
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        result = { error: rawText };
+      }
 
       if (!response.ok) {
-        setActionError(result.error || 'ફાઇલ અપલોડ થઈ શકી નથી.');
+        if (response.status === 413 || rawText.includes('Request Entity Too Large')) {
+          setActionError('ફાઈલનું કદ સર્વર લિમિટ (4.5 MB) કરતાં મોટું હોવાથી અપલોડ થઈ શકી નથી.');
+        } else {
+          setActionError(result.error || 'ફાઇલ અપલોડ કરવામાં અણધારી ભૂલ આવી.');
+        }
         return;
       }
 
