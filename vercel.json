@@ -1,12 +1,9 @@
 {
+  "framework": "nextjs",
   "crons": [
     {
       "path": "/api/cron/gmail-watch",
       "schedule": "0 0 */3 * *"
     }
   ]
-}
-
-{
-  "framework": "nextjs"
 }
