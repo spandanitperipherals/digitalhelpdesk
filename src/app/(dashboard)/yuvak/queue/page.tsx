@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { useRouter } from 'next/navigation';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -29,6 +30,13 @@ interface ServiceRequest {
     notes: string;
     created_at: string;
   }[];
+}
+
+interface UserProfile {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
 }
 
 const navItems: { label: string; filter: QueueFilter; icon: string }[] = [
@@ -70,6 +78,12 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
       return <svg {...common}><path d="M18 9a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4" /></svg>;
     case 'spark':
       return <svg {...common}><path d="m12 3 1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8L12 3Z" /><path d="m19 16 .8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8L19 16Z" /></svg>;
+    case 'user':
+      return <svg {...common}><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" /></svg>;
+    case 'logout':
+      return <svg {...common}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" /></svg>;
+    case 'settings':
+      return <svg {...common}><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" /></svg>;
     default:
       return null;
   }
@@ -97,6 +111,7 @@ function formatDate(date: string) {
 }
 
 export default function YuvakQueuePage() {
+  const router = useRouter();
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<QueueFilter>('All');
@@ -105,6 +120,63 @@ export default function YuvakQueuePage() {
   const [submitting, setSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [actionError, setActionError] = useState('');
+
+  // Header Dropdown States
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  
+  // Profile & Password Edit State
+  const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
+  const [editName, setEditName] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [settingsLoading, setSettingsLoading] = useState(false);
+  const [settingsMsg, setSettingsMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const notifRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+
+  // લૉગિન યુઝર પ્રોફાઇલ મેળવવી
+  useEffect(() => {
+    async function loadCurrentProfile() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id, name, email, role')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile) {
+          setUserProfile(profile as UserProfile);
+          setEditName(profile.name || '');
+        } else {
+          setUserProfile({
+            id: session.user.id,
+            name: session.user.user_metadata?.full_name || 'યુવક',
+            email: session.user.email || '',
+            role: 'yuvak',
+          });
+          setEditName(session.user.user_metadata?.full_name || '');
+        }
+      }
+    }
+    loadCurrentProfile();
+  }, []);
+
+  // બહાર ક્લિક કરવાથી ડ્રોપડાઉન બંધ કરવું
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+      if (profileRef.current && !profileRef.current.contains(event.target as Node)) {
+        setShowProfileMenu(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const fetchRequests = useCallback(async () => {
     const { data, error } = await supabase
@@ -150,6 +222,46 @@ export default function YuvakQueuePage() {
     () => filter === 'All' ? requests : requests.filter((request) => request.status === filter),
     [filter, requests]
   );
+
+  // લૉગ આઉટ હેન્ડલર
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push('/login');
+  };
+
+  // પ્રોફાઇલ સેટિંગ્સ અપડેટ હેન્ડલર
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSettingsLoading(true);
+    setSettingsMsg(null);
+
+    try {
+      if (userProfile && editName.trim()) {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ name: editName.trim() })
+          .eq('id', userProfile.id);
+
+        if (profileError) throw profileError;
+        setUserProfile((prev) => prev ? { ...prev, name: editName.trim() } : null);
+      }
+
+      if (newPassword.trim()) {
+        const { error: passError } = await supabase.auth.updateUser({
+          password: newPassword.trim(),
+        });
+        if (passError) throw passError;
+        setNewPassword('');
+      }
+
+      setSettingsMsg({ type: 'success', text: 'પ્રોફાઇલ વિગતો સફળતાપૂર્વક અપડેટ થઈ.' });
+      setTimeout(() => setShowSettingsModal(false), 1200);
+    } catch (err: any) {
+      setSettingsMsg({ type: 'error', text: err.message || 'અપડેટ કરવામાં ભૂલ આવી.' });
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
 
   const startTask = async (id: number) => {
     setActionError('');
@@ -208,9 +320,17 @@ export default function YuvakQueuePage() {
       : '#e9edf3',
   };
 
+  // અવતાર માટે અક્ષરો (દા.ત. Dhaval -> DH, Jignesh -> JV)
+  const userInitials = useMemo(() => {
+    if (!userProfile?.name) return 'JV';
+    const parts = userProfile.name.trim().split(' ');
+    if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
+    return userProfile.name.slice(0, 2).toUpperCase();
+  }, [userProfile]);
+
   return (
     <div className="min-h-screen w-full bg-[#f4f7fb] text-[#14233d] flex flex-col lg:flex-row antialiased">
-      {/* Sidebar - responsive width */}
+      {/* Sidebar */}
       <aside className="w-full shrink-0 flex-col bg-[#0b2445] text-white flex lg:w-64 xl:w-72">
         <div className="flex items-center gap-3 border-b border-white/10 px-5 py-5">
           <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-[#f4cf7a] to-[#d89725] text-xl font-bold text-[#10294d] shadow-lg">
@@ -267,24 +387,120 @@ export default function YuvakQueuePage() {
         </div>
       </aside>
 
-      {/* Main Screen Content - Edge-to-Edge Fluid Full Width */}
+      {/* Main Screen Content */}
       <main className="w-full min-w-0 flex-1 flex flex-col">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 py-3.5 backdrop-blur-xl sm:px-8">
+        {/* Header with Functional Dropdowns */}
+        <header className="sticky top-0 z-30 flex items-center justify-between border-b border-slate-200/80 bg-white/95 px-4 py-3.5 backdrop-blur-xl sm:px-8">
           <div>
             <p className="text-xs font-medium text-slate-500">સેવા વ્યવસ્થાપન / ડેશબોર્ડ</p>
             <h1 className="mt-0.5 text-lg font-bold text-[#10294d] sm:text-xl">કોમ્પ્યુટર રૂમ હેલ્પડેસ્ક</h1>
           </div>
-          <div className="flex items-center gap-3 sm:gap-5">
+          
+          <div className="flex items-center gap-3 sm:gap-4">
             <div className="hidden text-right sm:block">
-              <p className="text-xs font-semibold text-slate-700">સેવા પોર્ટલ</p>
-              <p className="mt-0.5 text-[11px] text-slate-400">અતલાદરા મંદિર</p>
+              <p className="text-xs font-semibold text-slate-700">{userProfile?.name || 'સેવા પોર્ટલ'}</p>
+              <p className="mt-0.5 text-[11px] text-slate-400 capitalize">{userProfile?.role || 'અતલાદરા મંદિર'}</p>
             </div>
-            <button type="button" aria-label="Notifications" className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-slate-50">
-              <Icon name="bell" size={18} />
-              <span className="absolute right-2 top-2 h-2 w-2 rounded-full border-2 border-white bg-[#df9b24]" />
-            </button>
-            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8eff9] text-sm font-bold text-[#153967] ring-2 ring-white">
-              JV
+
+            {/* Notification Popover */}
+            <div className="relative" ref={notifRef}>
+              <button
+                type="button"
+                aria-label="Notifications"
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  setShowProfileMenu(false);
+                }}
+                className="relative flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 transition hover:bg-slate-50"
+              >
+                <Icon name="bell" size={18} />
+                {counts.pending > 0 && (
+                  <span className="absolute right-2 top-2 h-2.5 w-2.5 rounded-full border-2 border-white bg-[#df9b24] animate-pulse" />
+                )}
+              </button>
+
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-80 sm:w-96 rounded-2xl border border-slate-200 bg-white p-4 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                    <h3 className="font-bold text-sm text-[#122b4c]">સૂચનાઓ (Notifications)</h3>
+                    <span className="text-[10px] font-semibold bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full">
+                      {counts.pending} પેન્ડિંગ
+                    </span>
+                  </div>
+
+                  <div className="mt-3 max-h-72 overflow-y-auto divide-y divide-slate-100">
+                    {requests.slice(0, 5).map((req) => (
+                      <div key={req.id} className="py-2.5 hover:bg-slate-50 px-2 rounded-xl transition">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-semibold text-slate-800 truncate max-w-[200px]">
+                            {req.subject || req.description}
+                          </span>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                            req.status === 'Pending' ? 'bg-amber-100 text-amber-800' : 'bg-blue-100 text-blue-800'
+                          }`}>
+                            {getStatusLabel(req.status)}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-slate-500 mt-1">
+                          {req.sants?.name || 'પૂજ્ય સંત'} • {formatDate(req.created_at)}
+                        </p>
+                      </div>
+                    ))}
+                    {requests.length === 0 && (
+                      <p className="text-center text-xs text-slate-400 py-6">કોઈ નવી સૂચના નથી.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Profile Menu Dropdown */}
+            <div className="relative" ref={profileRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowProfileMenu(!showProfileMenu);
+                  setShowNotifications(false);
+                }}
+                className="flex h-10 w-10 items-center justify-center rounded-full bg-[#e8eff9] text-sm font-bold text-[#153967] ring-2 ring-white hover:ring-amber-400 transition"
+              >
+                {userInitials}
+              </button>
+
+              {showProfileMenu && (
+                <div className="absolute right-0 mt-2 w-64 rounded-2xl border border-slate-200 bg-white p-3 shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                  <div className="border-b border-slate-100 pb-3 px-2">
+                    <p className="text-xs font-bold text-slate-800">{userProfile?.name || 'યુવક સેવક'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">{userProfile?.email}</p>
+                    <span className="inline-block mt-1 text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-600 px-2 py-0.5 rounded">
+                      રોલ: {userProfile?.role || 'yuvak'}
+                    </span>
+                  </div>
+
+                  <div className="py-2 space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettingsModal(true);
+                        setShowProfileMenu(false);
+                      }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-slate-700 rounded-xl hover:bg-slate-100 transition"
+                    >
+                      <Icon name="settings" size={16} />
+                      <span>પ્રોફાઇલ સેટિંગ્સ</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-rose-600 rounded-xl hover:bg-rose-50 transition"
+                    >
+                      <Icon name="logout" size={16} />
+                      <span>લૉગ આઉટ (Sign Out)</span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </header>
@@ -300,7 +516,7 @@ export default function YuvakQueuePage() {
               <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-[#f4d38f]">
                 <span className="h-px w-7 bg-[#f0bb4f]" /> ડિજિટલ સેવા · સત્સંગની સેવા
               </p>
-              <h2 className="text-2xl font-bold leading-tight sm:text-3xl">જય સ્વામિનારાયણ, યુવક</h2>
+              <h2 className="text-2xl font-bold leading-tight sm:text-3xl">જય સ્વામિનારાયણ, {userProfile?.name?.split(' ')[0] || 'યુવક'}</h2>
               <p className="mt-2 max-w-xl text-sm leading-6 text-blue-100/80">
                 કોમ્પ્યુટર રૂમ સેવા ડેશબોર્ડમાં આપનું સ્વાગત છે. સંતો તરફથી આવેલી વિનંતીઓનું સંચાલન અહીંથી કરો.
               </p>
@@ -617,6 +833,84 @@ export default function YuvakQueuePage() {
           </footer>
         </div>
       </main>
+
+      {/* Profile Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-[#081a31]/60 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3 mb-4">
+              <h2 className="text-base font-bold text-[#122b4c]">પ્રોફાઇલ સેટિંગ્સ (Profile Settings)</h2>
+              <button
+                type="button"
+                onClick={() => setShowSettingsModal(false)}
+                className="text-slate-400 hover:text-slate-700 text-sm font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {settingsMsg && (
+              <div className={`mb-4 p-3 rounded-xl text-xs font-medium ${
+                settingsMsg.type === 'success' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-rose-50 text-rose-800 border border-rose-200'
+              }`}>
+                {settingsMsg.text}
+              </div>
+            )}
+
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">ઈમેલ સરનામું</label>
+                <input
+                  type="email"
+                  disabled
+                  value={userProfile?.email || ''}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-100 px-3 py-2 text-xs text-slate-500 cursor-not-allowed"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">પૂરું નામ (Full Name)</label>
+                <input
+                  type="text"
+                  required
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#102f55]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">નવો પાસવર્ડ (જો બદલવો હોય તો જ લખો)</label>
+                <input
+                  type="password"
+                  placeholder="નવો પાસવર્ડ દાખલ કરો..."
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full rounded-xl border border-slate-200 px-3 py-2 text-xs text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#102f55]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={settingsLoading}
+                  onClick={() => setShowSettingsModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100"
+                >
+                  રદ કરો
+                </button>
+                <button
+                  type="submit"
+                  disabled={settingsLoading}
+                  className="rounded-xl bg-[#102f55] px-4 py-2 text-xs font-bold text-white hover:bg-[#1a4478] disabled:opacity-50"
+                >
+                  {settingsLoading ? 'સાચવી રહ્યું છે...' : 'સાચવો'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Upload & Complete Modal */}
       {selectedRequest && (
