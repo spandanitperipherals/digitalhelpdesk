@@ -1,12 +1,9 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from '@lib/supabase/client';
 
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabase = createClient();
 
 interface Sant {
   id: number;
@@ -17,6 +14,24 @@ interface Sant {
   niyam: string | null;
   is_active: boolean;
   created_at: string;
+}
+
+const { data, error } = await supabase
+  .from('sants')
+  .insert([
+    {
+      name,
+      email,
+      mobile,
+      shared_folder_link,
+      niyam,
+      updated_at: new Date().toISOString(),
+    },
+  ]);
+
+if (error) {
+  console.error("Supabase Insert Error:", error);
+  alert(`ભૂલ: ${error.message}`);
 }
 
 export default function AdminSantsManagementPage() {
@@ -169,8 +184,7 @@ export default function AdminSantsManagementPage() {
             placeholder="સંતનું નામ, ઈમેલ અથવા મોબાઈલ નંબરથી શોધો..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full md:w-96 px-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 bg-white"
-          />
+            className="w-full rounded-xl border border-slate-700 bg-slate-900/80 px-4 py-2.5 text-sm text-white placeholder-slate-400 focus:border-amber-400 focus:outline-none focus:ring-1 focus:ring-amber-400"          />
         </div>
 
         {/* Sants Table */}
@@ -186,7 +200,7 @@ export default function AdminSantsManagementPage() {
                   <th className="px-6 py-4 text-right">ક્રિયા (Actions)</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
+              <tbody className={`${inter.variable} ${notoSansGujarati.variable} font-sans bg-abyss text-slate-100 antialiased`}>
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="text-center py-8 text-slate-400">
